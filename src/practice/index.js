@@ -46,10 +46,19 @@ export class PracticeSystem {
         ctx.events.emit('actor:death', { actor: this.dummy, point: e.point, impulse: null });
       }
     });
+    this.active = true;
     this._place(0);
   }
 
+  /** Practice dummy on/off (off during a duel). */
+  setActive(on) {
+    this.active = on;
+    this.avatar.setAlive(on);
+    if (on) this.dummy.hp = MAX_HP;
+  }
+
   update(dt, ctx) {
+    if (!this.active) return;
     const now = ctx.time.elapsed;
     if (!this.avatar.alive) {
       if (now >= this._deadUntil) {

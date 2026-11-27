@@ -228,7 +228,10 @@ export class PlayerSystem {
       err: { yaw: 0, pitch: 0 }, vel: { yaw: 0, pitch: 0 }, prevYaw: 0, prevPitch: 0, has: false,
       target: new THREE.Vector3(),
     });
-    const avatar = this.ctx.peek('opponent')?.avatar ?? this.ctx.peek('practice')?.avatar;
+    // The duel opponent while a match is on, otherwise the practice dummy.
+    const opp = this.ctx.peek('opponent');
+    const pr = this.ctx.peek('practice');
+    const avatar = opp?.visible ? opp.avatar : pr?.active !== false ? pr?.avatar : null;
     const level = this.ctx.config.aimAssist ?? 'off';
     if (!avatar?.alive || level === 'off') {
       st.has = false;
