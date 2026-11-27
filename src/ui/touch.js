@@ -77,7 +77,7 @@ export class TouchControls {
 
     this.fps = el('div', 'fps', this.root, '-- fps');
     this.fps.dataset.action = 'fps';
-    this._fpsOn = true;
+    this._detail = false;
     this._frames = 0;
     this._acc = 0;
 
@@ -105,8 +105,7 @@ export class TouchControls {
       } else if (btn?.dataset.action === 'ads') {
         this.input.toggleAds();
       } else if (btn?.dataset.action === 'fps') {
-        this._fpsOn = !this._fpsOn;
-        this.fps.style.opacity = this._fpsOn ? '1' : '0.25';
+        this._detail = !this._detail;
       } else if (btn?.dataset.code) {
         this.input.touchButton(btn.dataset.code, true);
         btn.classList.add('held');
@@ -157,7 +156,15 @@ export class TouchControls {
     if (this._acc >= 0.5) {
       const fps = Math.round(this._frames / this._acc);
       const dr = this.ctx.peek('render')?.dynres;
-      this.fps.textContent = dr ? `${fps} fps · ${Math.round(dr.scale * 100)}%` : `${fps} fps`;
+      let txt = dr ? `${fps} fps · ${Math.round(dr.scale * 100)}%` : `${fps} fps`;
+      const pf = globalThis.__ENGINE__?.perf;
+      if (this._detail && pf) {
+        const cpu = pf.sim + pf.update + pf.render;
+        txt += ` | frame ${(1000 / Math.max(1, fps)).toFixed(0)}ms cpu ${cpu.toFixed(0)}ms` +
+          ` (phys ${pf.sim.toFixed(0)} upd ${pf.update.toFixed(0)} draw ${pf.render.toFixed(0)})` +
+          ` | ${pf.calls} calls ${(pf.tris / 1e6).toFixed(2)}M tris`;
+      }
+      this.fps.textContent = txt;
       this._frames = 0;
       this._acc = 0;
     }

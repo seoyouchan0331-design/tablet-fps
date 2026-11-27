@@ -118,6 +118,8 @@ export class Engine {
   /** Advance one frame. Exposed so the capture harness can pump frames by hand. */
   step(now = performance.now()) {
     const t = this.time;
+    const pf = this.perf ?? (this.perf = { sim: 0, update: 0, render: 0, calls: 0, tris: 0 });
+    const c0 = performance.now();
     // Clamp so a tab-switch or a breakpoint doesn't teleport the simulation.
     const rawDt = Math.min(0.1, Math.max(0, (now - this._last) / 1000));
     this._last = now;
@@ -138,12 +140,26 @@ export class Engine {
     }
     if (steps === MAX_SUBSTEPS) this._accum = 0; // shed backlog rather than spiral
     t.alpha = this._accum / FIXED_DT;
+    const c1 = performance.now();
 
     for (const sys of this.registry.with('update')) sys.update(t.dt, this.ctx);
     for (const sys of this.registry.with('lateUpdate')) sys.lateUpdate(t.dt, this.ctx);
+    const c2 = performance.now();
 
     const renderSystem = this.registry.peek('render');
     if (typeof renderSystem?.render === 'function') renderSystem.render(this.ctx);
+    const c3 = performance.now();
+
+    // CPU-side frame cost, smoothed. render = time to SUBMIT GL calls (not GPU time).
+    const k = 0.1;
+    pf.sim += (c1 - c0 - pf.sim) * k;
+    pf.update += (c2 - c1 - pf.update) * k;
+    pf.render += (c3 - c2 - pf.render) * k;
+    const info = renderSystem?.renderer?.info?.render;
+    if (info) {
+      pf.calls = info.calls;
+      pf.tris = info.triangles;
+    }
 
     this.input.endFrame();
   }
