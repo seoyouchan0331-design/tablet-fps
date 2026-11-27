@@ -42,8 +42,11 @@ export const LOOK_SENS = { min: 0.4, max: 2.5 };
 
 const clone = (b) => Object.fromEntries(Object.entries(b).map(([k, v]) => [k, [...v]]));
 
+/** Kill-sound packs (src/audio/killsounds.js), kept here so settings stay dependency-free. */
+export const KILL_SOUNDS = ['neon', 'chime', 'arcade', 'impact'];
+
 export function defaultSettings() {
-  return { bindings: clone(DEFAULT_BINDINGS), touch: { scale: 1, layout: {}, lookSens: 1 } };
+  return { bindings: clone(DEFAULT_BINDINGS), touch: { scale: 1, layout: {}, lookSens: 1 }, killSound: 'neon' };
 }
 
 /**
@@ -70,6 +73,7 @@ function sanitize(raw) {
       if (Array.isArray(v) && v.every((c) => typeof c === 'string' && !RESERVED.has(c))) s.bindings[a] = v.slice(0, 2);
     }
   }
+  if (KILL_SOUNDS.includes(raw.killSound)) s.killSound = raw.killSound;
   const t = raw.touch;
   if (t && typeof t === 'object') {
     s.touch.scale = clamp(t.scale, TOUCH_SCALE.min, TOUCH_SCALE.max, 1);

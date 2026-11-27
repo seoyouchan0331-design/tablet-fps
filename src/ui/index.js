@@ -17,6 +17,8 @@ import { TouchControls } from './touch.js';
 import { LoadoutPicker } from './loadout.js';
 import { ControlsPanel } from './controls.js';
 import { ScopeOverlay } from './scope.js';
+import { KillBanner } from './killbanner.js';
+import { KILL_PACKS, killLevel } from '../audio/killsounds.js';
 
 const KILL_FLASH_S = 0.12;
 
@@ -107,6 +109,8 @@ export class UiSystem {
       'background:radial-gradient(ellipse at center, rgba(61,242,255,0) 45%, rgba(61,242,255,.55) 100%)';
     this._flashT = 0;
     this.scope = new ScopeOverlay(host); // under the touch buttons (z 5)
+    this.killBanner = new KillBanner(host);
+    this._kills = 0; // this match's kills: drives the kill-sound climb and the banner pips
     // The boot screen is now the duel main menu (MatchSystem); PRACTICE opens
     // this picker. Kept false here so the HUD never shows it on its own.
     this._loadoutPending = false;
@@ -193,6 +197,10 @@ export class UiSystem {
     this._unsubs = [];
     const on = (type, fn) => this._unsubs.push(ctx.events.on(type, fn));
 
+    on('match:start', () => {
+      this._kills = 0;
+    });
+
     on('weapon:fire', (e) => {
       if (e?.remote) return; // the duel opponent's shot, not ours
       this.crosshair.onFire(e?.recoil ?? 1);
@@ -225,6 +233,10 @@ export class UiSystem {
       if (this._isPlayerTarget(e.target)) return;
       const kind = e.killed ? 'kill' : e.headshot ? 'head' : e.armour ? 'armour' : 'hit';
       this.hitmarker(kind);
+      // Hit sound on the shooter's own detection (instant); a duel kill only
+      // arrives once the host confirms it, and that event carries `confirmed`.
+      const audio = ctx.peek('audio');
+      if (!e.confirmed && !e.killed) audio?.confirm?.(e.headshot ? 'head' : 'hit');
       if (e.point) {
         this.damageNumber(
           e.point,
@@ -240,7 +252,11 @@ export class UiSystem {
           headshot: !!e.headshot,
           mine: true,
         });
-        this.banner.show('Enemy Eliminated', e.headshot ? '+150 XP · HEADSHOT' : '+100 XP');
+        this._kills++;
+        const level = killLevel(this._kills);
+        const pack = ctx.settings?.killSound in KILL_PACKS ? ctx.settings.killSound : 'neon';
+        audio?.confirm?.('kill', { level, headshot: !!e.headshot, pack });
+        this.killBanner.show(level, !!e.headshot, KILL_PACKS[pack].color);
         this._flashT = KILL_FLASH_S;
         setStyle(this.killFlash, 'opacity', '1');
         this.state.scoreUs++;
@@ -465,6 +481,7 @@ export class UiSystem {
     const wp = ctx.peek('weapons');
     this.scope.set(!!wp?.current?.scopeFov && wp.adsProgress > 0.85 && !this.menu.open, ctx);
     this.scope.update(rawDt);
+    this.killBanner.update(rawDt);
     if (this._flashT > 0) {
       this._flashT = Math.max(0, this._flashT - rawDt);
       setStyle(this.killFlash, 'opacity', (this._flashT / KILL_FLASH_S).toFixed(2));
@@ -653,6 +670,7 @@ export class UiSystem {
     this._unsubs.length = 0;
     this.crosshair.dispose();
     this.scope.dispose();
+    this.killBanner.dispose();
     this.hit.dispose();
     this.arcs.dispose();
     this.health.dispose();

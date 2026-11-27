@@ -51,3 +51,12 @@ test('key labels are human readable', () => {
   assert.equal(keyLabel('Space'), 'Space');
   assert.equal(keyLabel(undefined), '—');
 });
+
+test('kill sound pack: default neon, saved choice kept, junk ignored', async () => {
+  const { loadSettings, KILL_SOUNDS } = await import('../src/core/settings.js');
+  const mem = (v) => ({ getItem: () => JSON.stringify(v), setItem() {} });
+  assert.equal(loadSettings(mem({})).killSound, 'neon');
+  assert.equal(loadSettings(mem({ killSound: 'arcade' })).killSound, 'arcade');
+  assert.equal(loadSettings(mem({ killSound: 'nope' })).killSound, 'neon');
+  assert.deepEqual(KILL_SOUNDS, ['neon', 'chime', 'arcade', 'impact']);
+});

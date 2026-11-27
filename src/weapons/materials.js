@@ -869,7 +869,7 @@ export const WEAPON_MATERIALS = {
  * Those two are owned here and disposed here.
  */
 /** Flat palette for the low-poly (tablet) guns: [colour, roughness, metalness]. */
-const LOWPOLY_PALETTE = {
+export const LOWPOLY_PALETTE = {
   lp_body: [0x2f353d, 0.55, 0.15],
   lp_metal: [0x7d8692, 0.35, 0.75],
   lp_dark: [0x16191d, 0.6, 0.2],

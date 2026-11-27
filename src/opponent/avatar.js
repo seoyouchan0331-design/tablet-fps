@@ -4,6 +4,12 @@
  * run / jump / death driven by gait.js from its ground speed. Without the
  * model (load failed, unit tests) it falls back to a neon box mannequin.
  *
+ * It carries the opponent's actual gun (gun.js) in both hands. The arms are
+ * posed by two-bone IK on top of the walk/run clips (legs and torso keep the
+ * clip), so the gun follows where they aim (pitch), kicks when they fire,
+ * drops to a low carry when they sprint, tilts for a reload and dips out and
+ * back in on a weapon swap.
+ *
  * Either way it owns the two physics colliders (head sphere, body capsule)
  * sized by HITBOX; the robot is scaled so its head centre sits on the head
  * hitbox.
@@ -13,6 +19,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { HITBOX, HITBOX_CROUCH, hitboxAt } from './hitbox.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { pickClip } from './gait.js';
+import { buildGun, GUN_IDS, HOLD } from './gun.js';
+import { solveElbow, aimBone } from './armik.js';
 
 const MODEL_URL = 'models/robot.glb';
 /** Robot head centre is ~3.52 model units up; put it on the head hitbox. */
@@ -22,6 +30,7 @@ const ACCENT = 0xff5a36;
 const CROUCH_SQUASH = HITBOX_CROUCH.headY / HITBOX.head.y;
 const FADE = 0.15; // s crossfade between clips
 const CORPSE_S = 2.5; // how long the death pose stays visible
+const GUN_SCALE = 1.8;
 
 let _modelPromise = null;
 
@@ -78,6 +87,7 @@ export class Avatar {
 
     if (opts.model && opts.clone) this._buildRobot(opts.model, opts.clone);
     else this._buildMannequin(opts);
+    this._buildGuns();
     scene.add(this.root);
 
     const L = physics.LAYER?.ACTOR;
@@ -180,10 +190,179 @@ export class Avatar {
       this._corpseT -= dt;
       if (this._corpseT <= 0) this.root.visible = false;
     }
-    if (!this.mixer) return;
+    if (!this.mixer) return this._holdGun(dt);
     const pick = pickClip({ speed: this._speed, air: this._air, alive: this.alive }, this.clip);
     this._play(pick.clip, pick.timeScale);
     this.mixer.update(dt);
+    this._holdGun(dt);
+  }
+
+  /* ---------------------------------------------------------------- gun -- */
+
+  _buildGuns() {
+    this.gunRoot = new THREE.Group();
+    this.gunRoot.name = 'held-gun';
+    // The robot is a cartoon with club-like forearms: a life-size gun vanishes
+    // inside its fists, so the held gun is drawn larger to read at a glance.
+    this.gunRoot.scale.setScalar(GUN_SCALE);
+    this.root.add(this.gunRoot);
+    this.guns = {};
+    for (const id of GUN_IDS) {
+      const g = buildGun(id);
+      g.visible = false;
+      this.gunRoot.add(g);
+      this.guns[id] = g;
+    }
+    this.weapon = 'rifle';
+    this._shown = 'rifle';
+    this.guns.rifle.visible = true;
+    this._aimPitch = 0;
+    this._pitchTarget = 0;
+    this._kick = 0; // 0..1, decays
+    this._kickV = 0;
+    this._reload = 0; // reload blend 0..1
+    this._reloading = false;
+    this._reloadT = 0;
+    this._swap = 0; // 1 at the bottom of a swap dip
+    this._swapDir = 0;
+    this._low = 0; // sprint low-carry blend
+    this._v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  }
+
+  /** Which gun they hold. A change plays the swap dip. */
+  setWeapon(id) {
+    if (!this.guns?.[id] || id === this.weapon) return;
+    this.weapon = id;
+    this._swapDir = 1; // dip down; the model switches at the bottom
+  }
+
+  /** Their look pitch (radians, + up). */
+  setAim(pitch) {
+    this._pitchTarget = Math.max(-1.2, Math.min(1.2, pitch || 0));
+  }
+
+  setReloading(on) {
+    if (on && !this._reloading) this._reloadT = 0;
+    this._reloading = !!on;
+  }
+
+  /** They fired: the gun kicks back and up (harder for heavy guns). */
+  fire() {
+    const heavy = this.weapon === 'sniper' ? 1.8 : this.weapon === 'shotgun' ? 1.5 : this.weapon === 'pistol' ? 0.8 : 0.55;
+    this._kickV += 9 * heavy;
+  }
+
+  /** World position of the muzzle of the gun they hold. */
+  muzzleWorld(out) {
+    const g = this.guns?.[this._shown];
+    if (!g) return out.copy(this.position).setY(this.position.y + 1.3);
+    g.updateWorldMatrix(true, false);
+    return out.copy(g.userData.muzzle).applyMatrix4(g.matrixWorld);
+  }
+
+  _bones() {
+    if (this._b !== undefined) return this._b;
+    // GLTFLoader sanitises node names ('UpperArm.R' -> 'UpperArmR').
+    const find = (n) => this.bodyNode?.getObjectByName(n) ?? this.bodyNode?.getObjectByName(n.replace(/\./g, '')) ?? null;
+    const b = {
+      torso: find('Torso'),
+      R: { up: find('UpperArm.R'), lo: find('LowerArm.R'), hand: find('Palm2.R') },
+      L: { up: find('UpperArm.L'), lo: find('LowerArm.L'), hand: find('Palm2.L') },
+    };
+    this._b = b.R.up && b.R.lo && b.R.hand && b.L.up && b.L.lo && b.L.hand ? b : null;
+    return this._b;
+  }
+
+  /** Pose the gun in avatar space, then reach both hands to it. */
+  _holdGun(dt) {
+    const gr = this.gunRoot;
+    if (!gr) return;
+    gr.visible = this.alive;
+    if (!this.alive) return;
+
+    // ---- springs and blends ----
+    this._aimPitch += (this._pitchTarget - this._aimPitch) * Math.min(1, dt * 14);
+    // kick: critically-damped-ish spring driven by fire()
+    this._kickV += (-this._kick * 220 - this._kickV * 24) * dt;
+    this._kick = Math.max(-0.3, Math.min(1.6, this._kick + this._kickV * dt));
+    const running = this._speed > 7 && !this._air;
+    this._low += ((running ? 1 : 0) - this._low) * Math.min(1, dt * 8);
+    this._reload += ((this._reloading ? 1 : 0) - this._reload) * Math.min(1, dt * 9);
+    if (this._reloading) this._reloadT += dt;
+    if (this._swapDir) {
+      this._swap += this._swapDir * dt / 0.18;
+      if (this._swap >= 1) {
+        this._swap = 1;
+        this._swapDir = -1;
+        this.guns[this._shown].visible = false;
+        this._shown = this.weapon;
+        this.guns[this._shown].visible = true;
+      } else if (this._swap <= 0) {
+        this._swap = 0;
+        this._swapDir = 0;
+      }
+    }
+
+    // ---- gun transform in avatar space (avatar faces -Z, right is +X) ----
+    const id = this._shown;
+    const pistol = id === 'pistol';
+    const k = this._kick, low = this._low, rl = this._reload, sw = this._swap;
+    const crouchDrop = this._crouch * (HITBOX.head.y - HITBOX_CROUCH.headY);
+    const pitch = this._aimPitch * (1 - low);
+    // pivot at the shoulders so aiming up/down swings the gun, not slides it
+    const b = this.mixer ? this._bones() : null;
+    let shoulderY = 1.36 - crouchDrop, reach = pistol ? 0.42 : 0.3;
+    if (b) {
+      this.root.updateMatrixWorld(true);
+      const sR = this.root.worldToLocal(b.R.up.getWorldPosition(this._v[0]));
+      shoulderY = sR.y;
+      // the robot's arms are short: hold the gun where its hands can reach
+      const arm = b.R.up.getWorldPosition(this._v[1]).distanceTo(b.R.lo.getWorldPosition(this._v[2])) +
+        b.R.lo.getWorldPosition(this._v[1]).distanceTo(b.R.hand.getWorldPosition(this._v[2]));
+      reach = arm * (pistol ? 0.9 : 0.62);
+    }
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    gr.position.set(
+      0.06 - low * 0.05,
+      shoulderY - 0.08 + sp * reach - low * 0.12 - sw * 0.3 - rl * 0.04 + k * 0.015,
+      -cp * reach + low * 0.06 + k * 0.07
+    );
+    gr.rotation.set(
+      pitch + k * 0.32 - low * 0.75 - sw * 1.0 - rl * 0.3,
+      -low * 0.5 + rl * 0.15,
+      -rl * 0.65,
+      'YXZ'
+    );
+    if (!b) return; // mannequin / no rig: gun only
+    this.root.updateMatrixWorld(true);
+
+    // ---- hand targets on the gun ----
+    const hold = HOLD[id];
+    const [tR, tL, , pole] = this._v;
+    gr.localToWorld(tR.fromArray(hold.right));
+    if (rl > 0.02) {
+      // support hand goes down to the magazine and back
+      const ph = Math.sin(Math.min(1, this._reloadT / 1.6) * Math.PI);
+      const m = this._v[2].fromArray(hold.mag);
+      m.y -= 0.1 * ph;
+      gr.localToWorld(m);
+      gr.localToWorld(tL.fromArray(hold.left)).lerp(m, rl);
+    } else {
+      gr.localToWorld(tL.fromArray(hold.left));
+    }
+
+    // ---- two-bone IK per arm; elbows bend down and out ----
+    for (const [side, target, out] of [['R', tR, 1], ['L', tL, -1]]) {
+      const arm = b[side];
+      const s = arm.up.getWorldPosition(this._v[2]);
+      const e0 = arm.lo.getWorldPosition(new THREE.Vector3());
+      const h0 = arm.hand.getWorldPosition(new THREE.Vector3());
+      const a = s.distanceTo(e0), c = e0.distanceTo(h0);
+      pole.set(out * 0.8, -1, 0.15).applyQuaternion(this.root.quaternion);
+      const e = solveElbow(s, target, a, c, pole);
+      aimBone(arm.up, arm.lo, new THREE.Vector3(e.x, e.y, e.z));
+      aimBone(arm.lo, arm.hand, target);
+    }
   }
 
   setPose(x, y, z, yaw) {

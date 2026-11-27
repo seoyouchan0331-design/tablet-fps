@@ -20,6 +20,7 @@
  * bark, setMasterVolume...) as harmless no-ops so callers never break.
  */
 import { SHOT_PROFILES, profileFor, synthShot, synthStep } from './synth.js';
+import { KILL_PACKS, killRate, killLevel, synthKill, synthHitTick, synthHeadDing } from './killsounds.js';
 
 /** Recorded files per weapon id (public/sfx). */
 const SHOT_FILES = { rifle: 'rifle', smg: 'smg', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper' };
@@ -57,8 +58,12 @@ export class DuelAudioSystem {
     this._raw = {
       shots: Object.fromEntries(Object.entries(SHOT_FILES).map(([id, f]) => [id, get(f)])),
       steps: STEP_FILES.map(get),
+      ui: Object.fromEntries(
+        Object.values(KILL_PACKS).flatMap((p) => Object.values(p.files ?? {})).map((f) => [f, get(`ui/${f}`)])
+      ),
     };
-    this._files = { shots: {}, steps: [] };
+    this.killPack = ctx.settings?.killSound in KILL_PACKS ? ctx.settings.killSound : 'neon';
+    this._files = { shots: {}, steps: [], ui: {} };
     this._offs = [
       ctx.events.on('weapon:fire', (e) => this._onFire(e)),
       ctx.events.on('player:footstep', (e) => this._step(e?.stance === 'crouch' ? 'crouch' : e?.running ? 'run' : 'walk', null, 1)),
@@ -127,6 +132,11 @@ export class DuelAudioSystem {
       for (let v = 0; v < VARIANTS; v++) list.push(buf(synthShot(p, sr, v + 1)));
       this._shots.set(p, list);
     }
+    this._ui = {
+      tick: buf(synthHitTick(sr)),
+      ding: buf(synthHeadDing(sr)),
+      neon: [1, 2, 3, 4, 5].map((l) => buf(synthKill(l, sr))),
+    };
     this._steps = {};
     for (const k of ['walk', 'run', 'crouch', 'land']) {
       this._steps[k] = [];
@@ -138,6 +148,11 @@ export class DuelAudioSystem {
   _decode(actx) {
     const dec = (p) =>
       p.then((ab) => (ab ? new Promise((ok) => actx.decodeAudioData(ab.slice(0), ok, () => ok(null))) : null)).catch(() => null);
+    for (const [name, p] of Object.entries(this._raw?.ui ?? {})) {
+      dec(p).then((b) => {
+        if (b) this._files.ui[name] = b;
+      });
+    }
     for (const [id, p] of Object.entries(this._raw?.shots ?? {})) {
       dec(p).then((b) => {
         if (b) this._files.shots[id] = b;
@@ -205,6 +220,33 @@ export class DuelAudioSystem {
     const level = file ? SHOT_LEVEL[id] ?? 0.8 : 0.8;
     if (e.remote) this._voice(buf, e.origin, level * 1.15, rate);
     else this._voice(buf, null, level, rate);
+  }
+
+  /** Pick the kill-sound pack (settings); unknown ids fall back to neon. */
+  setKillPack(id) {
+    this.killPack = KILL_PACKS[id] ? id : 'neon';
+  }
+
+  /**
+   * Hit confirmation, head-locked.
+   *   kind 'hit'  body hit tick      'head'  headshot ding
+   *   kind 'kill' the pack's kill sound at `level` (1..5); a headshot kill
+   *               also rings the headshot ding underneath.
+   */
+  confirm(kind, { level = 1, headshot = false, pack = this.killPack } = {}) {
+    if (!this.running || !this._ui) return;
+    const files = KILL_PACKS[pack]?.files;
+    const f = (k) => (files ? this._files.ui[files[k]] : null);
+    if (kind === 'hit') return this._voice(this._ui.tick, null, 0.55);
+    if (kind === 'head') return this._voice(f('head') ?? this._ui.ding, null, 0.7);
+    if (kind !== 'kill') return;
+    const l = killLevel(level);
+    this.stats.kills = (this.stats.kills ?? 0) + 1;
+    const kill = f('kill');
+    if (kill) this._voice(kill, null, 0.85, killRate(l));
+    else this._voice(this._ui.neon[l - 1], null, 0.75);
+    if (l >= 5) this._voice(f('final') ?? this._ui.ding, null, 0.7);
+    if (headshot) this._voice(f('head') ?? this._ui.ding, null, 0.45);
   }
 
   _step(kind, at, level) {

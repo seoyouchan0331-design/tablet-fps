@@ -30,7 +30,7 @@ export class OpponentSystem {
     });
     this.target.avatar = this.avatar;
     this.buffer = new SnapshotBuffer();
-    this._s = { x: 0, y: 0, z: 0, yaw: 0, alive: false, air: false, crouch: false };
+    this._s = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, w: 'rifle', rl: false, alive: false, air: false, crouch: false };
     this.visible = false;
     this.avatar.hide();
   }
@@ -57,6 +57,9 @@ export class OpponentSystem {
       if (s.alive) this.avatar.setPose(s.x, s.y, s.z, s.yaw);
       this.avatar.setAir(s.air);
       this.avatar.setCrouch(s.crouch);
+      this.avatar.setAim(s.pitch ?? 0);
+      if (s.w) this.avatar.setWeapon(s.w);
+      this.avatar.setReloading(!!s.rl);
     }
     this.avatar.tick(ctx.time.dt || dt);
   }

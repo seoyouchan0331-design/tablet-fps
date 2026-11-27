@@ -6,6 +6,7 @@
 import { el } from './util.js';
 import { BINDABLE, ACTION_LABELS, DEFAULT_BINDINGS, LOOK_SENS, rebind, keyLabel, saveSettings, defaultSettings } from '../core/settings.js';
 import { setBindings } from '../core/input.js';
+import { KILL_PACKS, PACK_IDS } from '../audio/killsounds.js';
 
 const CSS = `
 .ow-controls { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center;
@@ -24,6 +25,8 @@ const CSS = `
 .ow-controls .bar { display: flex; gap: 12px; flex-wrap: wrap; }
 .ow-controls input[type=range] { width: min(260px, 50vw); }
 .ow-controls .note { font-size: 13px; color: #8fa3ab; }
+.ow-controls button.pack { min-width: 0; flex: 1 1 110px; }
+.ow-controls button.pack.on { border-color: var(--pc); color: var(--pc); box-shadow: 0 0 0 2px var(--pc) inset; }
 `;
 
 export class ControlsPanel {
@@ -86,6 +89,28 @@ export class ControlsPanel {
         s.touch.lookSens = Number(sens.value);
         this.ctx.config.touchSensitivity = (this.ctx.config.touchSensitivityBase ?? 0.0045) * s.touch.lookSens;
         saveSettings(s);
+      });
+    }
+
+    el('h3', null, w, 'KILL SOUND');
+    el('div', 'note', w, 'Each kill in a match climbs a step; the 5th gets a finale. Tap to hear it.');
+    const packs = el('div', 'bar', w);
+    for (const id of PACK_IDS) {
+      const pk = KILL_PACKS[id];
+      const btn = el('button', 'pack', packs, pk.label);
+      btn.type = 'button';
+      btn.dataset.act = `kill-sound-${id}`;
+      btn.style.setProperty('--pc', pk.color);
+      btn.classList.toggle('on', (s.killSound ?? 'neon') === id);
+      btn.addEventListener('click', () => {
+        s.killSound = id;
+        saveSettings(s);
+        const audio = this.ctx.peek?.('audio');
+        audio?.setKillPack?.(id);
+        // preview: a 1st kill, then the 5th
+        audio?.confirm?.('kill', { level: 1, pack: id });
+        setTimeout(() => audio?.confirm?.('kill', { level: 5, pack: id }), 650);
+        this.render();
       });
     }
 

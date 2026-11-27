@@ -57,6 +57,24 @@ await p.keyboard.down('KeyF'); await frames(2); await p.keyboard.up('KeyF');
 for (let i = 0; i < 20; i++) { await aim(); await frames(1); }
 const sg = await p.evaluate(() => ({ fires: window.__fires, hits: window.__hits }));
 console.log('shotgun one pull', JSON.stringify(sg));
+// keep shooting until the dummy drops (a pull that lands 6 of 8 leaves it on 4 hp)
+for (let n = 0; n < 4; n++) {
+  const k = await p.evaluate(() => window.__AUDIO__.report().kills ?? 0);
+  if (k > 0) break;
+  await p.waitForFunction(() => window.__ENGINE__.ctx.peek('weapons').canFire(), null, { timeout: 30000 });
+  await aim(); await p.keyboard.down('KeyF'); await frames(2); await p.keyboard.up('KeyF');
+  for (let i = 0; i < 8; i++) { await aim(); await frames(1); }
+}
+await p.screenshot({ path: 'shots/kill-banner.png' });
+const kb = await p.evaluate(() => ({
+  count: window.__ENGINE__.ctx.peek('ui').killBanner.count ?? 0,
+  title: document.querySelector('.ow-kb .t').textContent,
+  pips: document.querySelectorAll('.ow-kb .pip.on').length,
+  kills: window.__AUDIO__.report().kills ?? 0,
+}));
+console.log('kill banner', JSON.stringify(kb));
+if (kb.count < 1 || kb.pips < 1) fail('kill banner not shown');
+if (kb.kills < 1) fail('kill sound not played');
 await p.waitForTimeout(600);
 await p.screenshot({ path: 'shots/shotgun.png' });
 if (sg.fires !== 1) fail(`one pull fired ${sg.fires} times`);

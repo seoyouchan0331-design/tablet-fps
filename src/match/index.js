@@ -229,6 +229,7 @@ export class MatchSystem {
   _startMatch() {
     const ctx = this.ctx;
     this.phase = 'match';
+    ctx.events.emit('match:start', {}); // kill counters / banners reset
     this.rematch = { host: false, guest: false };
     this.lobby.hide();
     ctx.config.aimAssist = this.settings.aimAssist;
@@ -336,11 +337,13 @@ export class MatchSystem {
       remote: true, weapon: 'rifle', origin: new THREE.Vector3(), dir: new THREE.Vector3(), seed: 0, flashScale: 0.8,
     });
     e.weapon = typeof m.weapon === 'string' ? m.weapon : 'rifle';
-    e.origin.set(at.x, at.y + 1.35, at.z);
+    opp.avatar.setWeapon?.(e.weapon);
+    opp.avatar.fire?.(); // the held gun kicks
+    if (opp.avatar.muzzleWorld) opp.avatar.muzzleWorld(e.origin);
+    else e.origin.set(at.x, at.y + 1.35, at.z);
     const eye = this.ctx.peek('player')?.eyePosition;
     if (eye) e.dir.copy(eye).sub(e.origin).normalize();
     else e.dir.set(0, 0, 1);
-    e.origin.addScaledVector(e.dir, 0.55); // out at the muzzle, not inside the body
     e.seed = (m.seq * 2654435761) >>> 0;
     this.ctx.events.emit('weapon:fire', e);
   }
@@ -465,7 +468,12 @@ export class MatchSystem {
         // Sender timestamps keep 30 Hz snapshots evenly spaced even when Wi-Fi
         // delivers them in bursts (receive time would collapse a burst to one).
         const t = this.clock && Number.isFinite(m.t) ? this.clock.map(m.t, now) : now;
-        this.ctx.peek('opponent')?.push(t, { x: m.x, y: m.y, z: m.z, yaw: m.yaw, alive: !!m.alive, air: !!m.air, crouch: !!m.crouch });
+        this.ctx.peek('opponent')?.push(t, {
+          x: m.x, y: m.y, z: m.z, yaw: m.yaw, alive: !!m.alive, air: !!m.air, crouch: !!m.crouch,
+          pitch: Number.isFinite(m.pitch) ? m.pitch : 0,
+          w: typeof m.w === 'string' ? m.w : 'rifle',
+          rl: !!m.rl,
+        });
         break;
       }
       case MSG.REMATCH:
@@ -529,6 +537,9 @@ export class MatchSystem {
           crouch: p.movement ? p.movement.stance !== 'stand' : false,
           x: pos.x, y: pos.y, z: pos.z,
           yaw: p.movement?.yaw ?? 0,
+          pitch: p.movement?.pitch ?? 0,
+          w: this._weaponId(),
+          rl: !!this.ctx.peek('weapons')?.reloading,
           alive: this.alive[this.role] && !p.dead,
         });
       }
