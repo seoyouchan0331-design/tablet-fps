@@ -50,14 +50,17 @@ export const ARENA = {
   ],
 };
 
-/** Floor + four perimeter walls for a SIZE x SIZE map. */
-const shell = () => [
-  { x: 0, y: -0.25, z: 0, w: SIZE, h: 0.5, d: SIZE, floor: true },
-  { x: 0, y: 2.5, z: H - 0.5, w: SIZE, h: 5, d: 1, wall: true },
-  { x: 0, y: 2.5, z: -(H - 0.5), w: SIZE, h: 5, d: 1, wall: true },
-  { x: H - 0.5, y: 2.5, z: 0, w: 1, h: 5, d: SIZE - 2, wall: true },
-  { x: -(H - 0.5), y: 2.5, z: 0, w: 1, h: 5, d: SIZE - 2, wall: true },
-];
+/** Floor + four perimeter walls for a size x size map. */
+const shell = (size = SIZE) => {
+  const h = size / 2;
+  return [
+    { x: 0, y: -0.25, z: 0, w: size, h: 0.5, d: size, floor: true },
+    { x: 0, y: 2.5, z: h - 0.5, w: size, h: 5, d: 1, wall: true },
+    { x: 0, y: 2.5, z: -(h - 0.5), w: size, h: 5, d: 1, wall: true },
+    { x: h - 0.5, y: 2.5, z: 0, w: 1, h: 5, d: size - 2, wall: true },
+    { x: -(h - 0.5), y: 2.5, z: 0, w: 1, h: 5, d: size - 2, wall: true },
+  ];
+};
 const SPAWNS = ARENA.spawns;
 
 /**
@@ -97,6 +100,51 @@ const BLOCKS_HALF = [
   { x: 0, y: 1.5, z: 8, w: 3, h: 3, d: 1 },
 ];
 
+/**
+ * FIELD — the big one, 80 x 80 m (7x GRID's floor). A climbable tower in
+ * the middle (steps of 0.6 m up to a 3 m deck), lane walls either side,
+ * blocky buildings in the corners, sniper perches on the flanks and cover
+ * scattered between, so every route has somewhere to break line of sight.
+ */
+const FIELD_SIZE = 80;
+const FIELD_HALF = [
+  // centre tower stairs, rising toward the deck (the deck is its own twin)
+  { x: 8.25, y: 0.3, z: 0, w: 1.5, h: 0.6, d: 3 },
+  { x: 6.75, y: 0.6, z: 0, w: 1.5, h: 1.2, d: 3 },
+  { x: 5.25, y: 0.9, z: 0, w: 1.5, h: 1.8, d: 3 },
+  { x: 3.75, y: 1.2, z: 0, w: 1.5, h: 2.4, d: 3 },
+  // lane wall
+  { x: 20, y: 1.5, z: 0, w: 0.8, h: 3, d: 16 },
+  // corner buildings
+  { x: 28, y: 2, z: 20, w: 8, h: 4, d: 6 },
+  { x: 28, y: 2, z: -20, w: 8, h: 4, d: 6 },
+  // flank sniper perch with stairs
+  { x: 32, y: 1.2, z: 0, w: 4, h: 2.4, d: 4 },
+  { x: 29.5, y: 0.9, z: 0, w: 1, h: 1.8, d: 3 },
+  { x: 28.5, y: 0.6, z: 0, w: 1, h: 1.2, d: 3 },
+  { x: 27.5, y: 0.3, z: 0, w: 1, h: 0.6, d: 3 },
+  // scattered cover
+  { x: 12, y: 0.6, z: 10, w: 3, h: 1.2, d: 1 },
+  { x: 14, y: 0.8, z: 14, w: 1, h: 1.6, d: 3 },
+  { x: 10, y: 1.25, z: 18, w: 2, h: 2.5, d: 2 },
+  { x: 6, y: 0.6, z: 24, w: 4, h: 1.2, d: 1 },
+  { x: -8, y: 1.25, z: 26, w: 2, h: 2.5, d: 2 },
+  { x: 16, y: 0.6, z: 28, w: 3, h: 1.2, d: 1 },
+  { x: -18, y: 1.5, z: 12, w: 6, h: 3, d: 0.8 },
+  { x: -12, y: 0.6, z: -4, w: 1, h: 1.2, d: 4 },
+  // shields the spawn from the tower's sight line
+  { x: 0, y: 1.5, z: 28, w: 6, h: 3, d: 0.8 },
+  // more cover so no stretch of floor is a shooting gallery
+  { x: 24, y: 1.25, z: 8, w: 2, h: 2.5, d: 2 },
+  { x: 22, y: 0.6, z: -10, w: 3, h: 1.2, d: 1 },
+  { x: 8, y: 1.5, z: -14, w: 5, h: 3, d: 0.8 },
+  { x: -4, y: 0.6, z: 14, w: 1, h: 1.2, d: 3 },
+  { x: 34, y: 1.5, z: 30, w: 6, h: 3, d: 0.8 },
+  { x: -30, y: 1.25, z: 30, w: 2, h: 2.5, d: 2 },
+  { x: 18, y: 1.25, z: -30, w: 2, h: 2.5, d: 2 },
+  { x: -26, y: 0.6, z: 4, w: 1, h: 1.2, d: 3 },
+];
+
 export const MAPS = {
   grid: { label: 'GRID', note: 'Mixed heights, all-round', layout: ARENA },
   lanes: {
@@ -115,6 +163,19 @@ export const MAPS = {
       size: SIZE,
       boxes: [...shell(), { x: 0, y: 0.6, z: 0, w: 2, h: 1.2, d: 2 }, ...BLOCKS_HALF, ...BLOCKS_HALF.map(mirror)],
       spawns: SPAWNS,
+    },
+  },
+  field: {
+    label: 'FIELD',
+    note: 'Huge — long rounds, every range',
+    roundTime: 50,
+    layout: {
+      size: FIELD_SIZE,
+      boxes: [...shell(FIELD_SIZE), { x: 0, y: 1.5, z: 0, w: 6, h: 3, d: 6 }, ...FIELD_HALF, ...FIELD_HALF.map(mirror)],
+      spawns: [
+        { x: 0, y: 0, z: 34, yaw: 0 },
+        { x: 0, y: 0, z: -34, yaw: Math.PI },
+      ],
     },
   },
 };

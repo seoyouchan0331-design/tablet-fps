@@ -10,12 +10,13 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
 const p = await (await b.newContext(ipad())).newPage();
 await p.goto(gameUrl(`http://127.0.0.1:${PORT}/`), { waitUntil: 'commit' });
 await p.waitForFunction(() => window.__READY__ === true, null, { timeout: 600000, polling: 2000 });
-for (const id of ['grid', 'lanes', 'blocks']) {
+for (const id of ['grid', 'lanes', 'blocks', 'field']) {
   const url = await p.evaluate((id) => {
     const e = window.__ENGINE__.ctx; const r = e.peek('render').renderer;
     e.peek('world').load(id);
     const cam = e.camera.clone(); cam.fov = 60; cam.aspect = 4 / 3; cam.updateProjectionMatrix();
-    cam.position.set(0, 22, 24); cam.lookAt(0, 0, 0);
+    const k = e.peek('world').layout.size / 30;
+    cam.position.set(0, 22 * k, 24 * k); cam.lookAt(0, 0, 0); cam.far = 2000; cam.updateProjectionMatrix();
     const size = r.getSize(new cam.position.constructor());
     r.setSize(800, 600, false); r.setRenderTarget(null); r.clear(); r.render(e.scene, cam);
     const u = r.domElement.toDataURL('image/png');

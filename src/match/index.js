@@ -270,7 +270,7 @@ export class MatchSystem {
       ui.state.scoreUs = ui.state.scoreThem = 0;
     }
     if (this.role === 'host') {
-      this.mode = new RoundsMode({ winTarget: this.settings.winTarget });
+      this.mode = new RoundsMode({ winTarget: this.settings.winTarget, roundTime: MAPS[this.settings.map]?.roundTime ?? 30 });
       this._broadcastRound(this.mode.start());
     }
   }

@@ -61,12 +61,12 @@ test('spawns are not inside a box', () => {
 // ---- every map --------------------------------------------------------------
 import { MAPS, MAP_IDS } from '../src/arena/layout.js';
 
-test('three maps, GRID first and identical to ARENA', () => {
-  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks']);
+test('four maps, GRID first and identical to ARENA', () => {
+  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'field']);
   assert.equal(MAPS.grid.layout, ARENA);
 });
 
-for (const id of ['grid', 'lanes', 'blocks']) {
+for (const id of ['grid', 'lanes', 'blocks', 'field']) {
   const L = MAPS[id].layout;
   test(`${id}: valid (symmetric, bounded, walls, spawns 24 m apart)`, () => {
     assert.deepEqual(validateLayout(L), []);
@@ -94,4 +94,20 @@ test('lanes: a long open sight line down the middle', () => {
 test('blocks: denser than lanes', () => {
   const n = (id) => MAPS[id].layout.boxes.filter((b) => !b.floor && !b.wall).length;
   assert.ok(n('blocks') > n('lanes'));
+});
+
+test('field: a huge map, spawns far apart, longer rounds, climbable tower', () => {
+  const F = MAPS.field;
+  assert.ok(F.layout.size >= 80, `size ${F.layout.size}`);
+  const [a, b] = F.layout.spawns;
+  assert.ok(Math.hypot(a.x - b.x, a.z - b.z) >= 60);
+  assert.ok(F.roundTime >= 45, 'room to find each other');
+  // every raised box near the tower can be climbed in steps of at most 0.6 m from the floor
+  const tops = F.layout.boxes.filter((o) => !o.floor && !o.wall && Math.abs(o.z) < 2.5 && o.x > 0).map((o) => +(o.y + o.h / 2).toFixed(2)).sort((x, y) => x - y);
+  let h = 0;
+  for (const t of tops) { if (t > 3.01) break; assert.ok(t - h <= 0.61, `step ${h} -> ${t}`); h = t; }
+});
+
+test('maps say their own round time (default 30 s)', () => {
+  for (const id of MAP_IDS) assert.ok(Number.isFinite(MAPS[id].roundTime ?? 30));
 });

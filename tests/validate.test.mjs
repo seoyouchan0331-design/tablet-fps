@@ -29,9 +29,14 @@ test('rejects fire faster than 90 % of the weapon cycle', () => {
   assert.equal(validateHit(claim, ctx).reason, 'fire-rate');
 });
 
-test('rejects beyond 80 m', () => {
-  const { claim, ctx } = base(); claim.point = [0, 1.2, -75];
+test('rejects beyond 120 m (longer than any map allows)', () => {
+  const { claim, ctx } = base(); claim.point = [0, 1.2, -115];
   assert.equal(validateHit(claim, ctx).reason, 'range');
+});
+
+test('accepts a corner-to-corner shot on the 80 m FIELD map', () => {
+  const { claim, ctx } = base(); claim.from = [-39, 1.6, -39]; claim.point = [39, 1.2, 39];
+  assert.deepEqual(validateHit(claim, ctx), { ok: true });
 });
 
 test('rejects hits through walls', () => {

@@ -131,6 +131,18 @@ export class LiteRenderSystem {
     if (i >= 0) this.lights.splice(i, 1);
   }
 
+  /** Size the sun's shadow box to a map of half-size `half` (metres). */
+  fitShadow(half) {
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -(half + 1);
+    sc.right = sc.top = half + 1;
+    const d = Math.max(30, half * 1.8);
+    this.sun.position.copy(SUN_DIR).multiplyScalar(d);
+    sc.far = d * 2.2;
+    sc.updateProjectionMatrix();
+    this.sun.shadow.needsUpdate = true;
+  }
+
   requestEnvMap() {
     return this.envMap;
   }

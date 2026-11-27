@@ -5,7 +5,8 @@
  * hit); the host only rejects claims that cannot be true. Order matters: the
  * cheapest and most common rejections first, line of sight (a raycast) last.
  */
-const MAX_RANGE = 80;
+/** Longest shot that can be real: FIELD's corner-to-corner diagonal is ~113 m. */
+const MAX_RANGE = 120;
 const PARTS = new Set(['head', 'body']);
 const vec = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n));
 

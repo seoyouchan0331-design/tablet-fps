@@ -114,9 +114,10 @@ export class ArenaSystem {
       instances: 0,
       drawCalls: 4,
     };
-    // the shadow map is frozen when the renderer is starved: redraw it once
-    const sun = ctx.peek?.('render')?.sun;
-    if (sun) sun.shadow.needsUpdate = true;
+    // shadows cover the whole map (and redraw once if the shadow map is frozen)
+    const render = ctx.peek?.('render');
+    render?.fitShadow?.(layout.size / 2);
+    if (render?.sun) render.sun.shadow.needsUpdate = true;
     // the minimap bakes the level once: ask for a fresh bake
     const mm = ctx.peek?.('ui')?.minimap;
     if (mm) {
