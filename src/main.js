@@ -7,6 +7,8 @@ import { MaterialSystem } from './materials/index.js';
 import { SkySystem } from './sky/index.js';
 import { ArenaSystem } from './arena/index.js';
 import { PracticeSystem } from './practice/index.js';
+import { OpponentSystem } from './opponent/index.js';
+import { MatchSystem } from './match/index.js';
 import { PhysicsSystem } from './physics/index.js';
 import { PlayerSystem } from './player/index.js';
 import { WeaponSystem } from './weapons/index.js';
@@ -46,12 +48,14 @@ engine
   .add(MaterialSystem)
   .add(ArenaSystem)
   .add(PracticeSystem)
+  .add(OpponentSystem)
   .add(PhysicsSystem)
   .add(PlayerSystem)
   .add(WeaponSystem)
   .add(FxSystem)
   .add(UiSystem)
-  .add(AudioSystem);
+  .add(AudioSystem)
+  .add(MatchSystem);
 if (!lite) engine.add(SkySystem);
 
 try {

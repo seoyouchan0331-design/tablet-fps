@@ -24,6 +24,8 @@ export class Health {
     this.value = HEALTH.max;
     this.dead = false;
     this.regenerating = false;
+    /** Duels turn regen off: one life, no healing within a round. */
+    this.regenEnabled = true;
     this.lastDamageTime = -100;
     this.suppression = 0;
     this.hitFlash = 0;
@@ -165,7 +167,7 @@ export class Health {
 
     // ---- regeneration ---------------------------------------------------
     const since = this.ctx.time.elapsed - this.lastDamageTime;
-    if (!this.dead && this.value < this.max && since > H.regenDelay) {
+    if (this.regenEnabled && !this.dead && this.value < this.max && since > H.regenDelay) {
       this.regenerating = true;
       // Ramp in so the recovery has a shape rather than a step.
       const ramp = clamp01((since - H.regenDelay) / H.regenRamp);

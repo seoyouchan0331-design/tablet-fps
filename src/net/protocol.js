@@ -16,6 +16,7 @@ export const MSG = Object.freeze({
   MATCH: 'match',
   REMATCH: 'rematch',
   BYE: 'bye',
+  PING: 'ping',
 });
 
 const TYPES = new Set(Object.values(MSG));

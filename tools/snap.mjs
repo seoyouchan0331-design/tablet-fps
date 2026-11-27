@@ -7,6 +7,8 @@ const p = await c.newPage();
 p.on('pageerror', (e) => console.log('PAGEERR', String(e).slice(0, 300)));
 await p.goto(`http://127.0.0.1:${process.argv[3] ?? 4173}/`, { waitUntil: 'commit' });
 await p.waitForFunction(() => window.__READY__ === true, null, { timeout: 600000, polling: 2000 });
+await p.waitForSelector('[data-act=practice]', { timeout: 30000 }).catch(() => {});
+await p.evaluate(() => document.querySelector('[data-act=practice]')?.click());
 await p.waitForFunction(() => !!document.querySelector('.ow-loadout:not([hidden])'), null, { timeout: 30000 }).catch(() => {});
 await p.evaluate(() => document.querySelector('.ow-loadout .start')?.click());
 await p.evaluate(() => { const pl = window.__ENGINE__.ctx.peek('player'); pl.movement.teleport(-3, 0.03, 8); pl.movement.yaw = 0.25; });

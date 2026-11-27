@@ -21,6 +21,9 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); if 
 await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.waitForFunction(() => window.__READY__ === true, null, { timeout: 240000 });
 
+// Main menu -> PRACTICE opens the loadout picker.
+await page.waitForSelector('[data-act=practice]', { timeout: 30000 });
+await page.evaluate(() => document.querySelector('[data-act=practice]').click());
 // Loadout picker: pick SMG and start (also verifies the picker gates control).
 const picker = await page.waitForFunction(() => !!document.querySelector('.ow-loadout:not([hidden])'), null, { timeout: 30000 }).then(() => true, () => false);
 console.log('loadout picker shown', picker);

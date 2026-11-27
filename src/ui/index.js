@@ -102,8 +102,9 @@ export class UiSystem {
     this.killFlash.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0;' +
       'background:radial-gradient(ellipse at center, rgba(61,242,255,0) 45%, rgba(61,242,255,.55) 100%)';
     this._flashT = 0;
-    // Shown on the first frame (player/weapons exist by then); capture runs skip it.
-    this._loadoutPending = !ctx.config.deterministic;
+    // The boot screen is now the duel main menu (MatchSystem); PRACTICE opens
+    // this picker. Kept false here so the HUD never shows it on its own.
+    this._loadoutPending = false;
     const lb = el('button', 'ow-btn', this.menu.resumeBtn.parentNode, 'Loadout');
     lb.type = 'button';
     lb.addEventListener('click', () => {

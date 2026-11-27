@@ -301,6 +301,15 @@ export class WeaponSystem {
     return true;
   }
 
+  /** Full magazines and reserves for every weapon (start of a duel round). */
+  refillAll() {
+    for (const st of this.states.values()) {
+      st.mag = st.def.magSize;
+      st.chambered = true;
+      st.reserve = st.def.reserve;
+    }
+  }
+
   /** Pick the match loadout; the primary is drawn immediately. */
   setLoadout(primary = 'rifle') {
     this.loadout = new Loadout(primary);
