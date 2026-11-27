@@ -6,7 +6,7 @@ test('mobile preset is cheap', () => {
   const q = createConfig({ quality: 'mobile' }).q;
   assert.ok(q.renderScale <= 0.7);
   for (const k of ['taa', 'gtao', 'ssr', 'volumetrics', 'motionBlur']) assert.equal(q[k], false, k);
-  assert.equal(q.cascades, 2);
+  assert.equal(q.cascades, 1);
   assert.equal(q.maxPixelRatio, 1);
 });
 
@@ -18,4 +18,10 @@ test('every preset has a pixel-ratio cap', () => {
 test('default quality follows input device', () => {
   assert.equal(pickDefaultQuality({ touch: true }), 'mobile');
   assert.equal(pickDefaultQuality({ touch: false }), 'ultra');
+});
+
+test('mobile preset: one shadow cascade, no depth prepass', () => {
+  assert.equal(QUALITY_PRESETS.mobile.cascades, 1);
+  assert.equal(QUALITY_PRESETS.mobile.prepass, false);
+  for (const [name, q] of Object.entries(QUALITY_PRESETS)) if (name !== 'mobile') assert.equal(q.prepass, true, name);
 });

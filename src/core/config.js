@@ -25,8 +25,10 @@ export const QUALITY_PRESETS = {
     renderScale: 0.7,
     maxPixelRatio: 1,
     shadowMapSize: 1024,
-    cascades: 2,
+    cascades: 1,
     shadowDistance: 45,
+    // Nothing in the mobile pipeline reads depth/normal/velocity: skip the pass.
+    prepass: false,
     taa: false,
     gtao: false,
     ssr: false,
@@ -40,6 +42,7 @@ export const QUALITY_PRESETS = {
   low: {
     renderScale: 0.72,
     maxPixelRatio: 1.5,
+    prepass: true,
     shadowMapSize: 1024,
     cascades: 3,
     shadowDistance: 60,
@@ -56,6 +59,7 @@ export const QUALITY_PRESETS = {
   medium: {
     renderScale: 0.85,
     maxPixelRatio: 1.5,
+    prepass: true,
     shadowMapSize: 2048,
     cascades: 3,
     shadowDistance: 90,
@@ -72,6 +76,7 @@ export const QUALITY_PRESETS = {
   high: {
     renderScale: 1.0,
     maxPixelRatio: 1.5,
+    prepass: true,
     shadowMapSize: 2048,
     cascades: 4,
     shadowDistance: 140,
@@ -88,6 +93,7 @@ export const QUALITY_PRESETS = {
   ultra: {
     renderScale: 1.0,
     maxPixelRatio: 1.5,
+    prepass: true,
     shadowMapSize: 4096,
     cascades: 4,
     shadowDistance: 200,
