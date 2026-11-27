@@ -121,5 +121,5 @@ test('town: long map with walk-in two-storey houses, Blender props, a ramp to cl
   assert.ok(L.boxes.some((b) => b.prop === 'arch') && L.boxes.some((b) => b.prop === 'fountain'));
   const stair = L.boxes.find((b) => b.ramp);
   assert.ok(stair.y + stair.h / 2 >= 3, 'stairs reach the upper floor');
-  assert.ok(L.boxes.some((b) => b.ry && !b.prop), 'turned crates');
+  assert.ok(['cratestack', 'stall', 'coverwall', 'planter'].every((n) => L.boxes.some((b) => b.prop === n)), 'modelled plaza cover');
 });

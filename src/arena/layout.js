@@ -152,7 +152,8 @@ const FIELD_HALF = [
  * two-storey houses around it you can walk into and climb (doors, windows on
  * both floors, inside stairs), arched gateways (Blender) between the plaza
  * and each spawn courtyard, turned market crates and a street behind the
- * houses on each long side.
+ * houses on each long side. The plaza's cover is modelled too: crate
+ * stacks, a market stall, low stone walls and a hedge planter.
  */
 const TOWN_W = 64;
 const TOWN_D = 36;
@@ -190,12 +191,16 @@ const TOWN_HALF = [
   prop('colonnade', 0, 13.2, Math.PI),
   // bell tower in the corner: the town's landmark
   { ...prop('belltower', 29, 13.5), sym: true },
-  // market crates, turned
-  { x: 6, y: 0.6, z: 3.5, w: 4, h: 1.2, d: 1.6, ry: Math.PI / 4 },
-  { x: 4, y: 0.6, z: -7, w: 3, h: 1.2, d: 1.4, ry: -Math.PI / 6 },
-  { x: 9.5, y: 0.5, z: 0.5, w: 1, h: 1, d: 1 },
-  // street planter: crouch cover
-  { x: 0, y: 0.3, z: -11, w: 6, h: 0.6, d: 1.2 },
+  // market: a stacked crate pile (chest and head-high cover), a lone crate
+  // and a stall whose counter is waist-high cover (all Blender props)
+  prop('cratestack', 6, 3.5, Math.PI / 4),
+  prop('stall', 4, -7.2, -Math.PI / 6),
+  prop('crate', 9.5, 0.5, 0.3),
+  // low stone walls flanking the arch: stand to shoot over, crouch to hide
+  prop('coverwall', 16.5, 3.2, Math.PI / 2, 0, { sx: 2.4 }),
+  prop('coverwall', 16.5, -3.2, Math.PI / 2, 0, { sx: 2.4 }),
+  // street planter with a clipped hedge: crouch cover
+  prop('planter', 0, -11, 0, 0, { sx: 2 }),
 ];
 
 export const MAPS = {

@@ -280,3 +280,125 @@ for k in range(3):
 neon(1.0, N, N, f=0.235, z=0.9)
 export('parapet')
 print('kit done ->', out)
+
+# ------------------------------------------------------------- fountain ----
+# Round fountain for the plaza: two-step base, moulded basin rim, central
+# pedestal with two bowls and a finial. 5.6 m across, 3.2 m tall. A low,
+# round cover block in the middle of the square.
+reset()
+SEG = 24
+cyl(2.8, 0.15, z=0.075, verts=SEG)                              # lower step
+cyl(2.6, 0.15, z=0.225, verts=SEG)                              # upper step
+basin = cyl(2.35, 0.55, z=0.575, verts=SEG)
+cut(basin, cyl(2.05, 0.6, z=0.85, verts=SEG))                   # hollow it
+rim = cyl(2.45, 0.1, z=0.9, verts=SEG)
+cut(rim, cyl(2.0, 0.2, z=0.9, verts=SEG))
+cyl(2.05, 0.05, z=0.55, verts=SEG)                              # water level (flat)
+cyl(0.45, 0.6, z=0.8, verts=12)                                 # pedestal foot
+cyl(0.28, 1.1, z=1.6, verts=12)                                 # shaft
+b1 = cyl(1.0, 0.22, z=2.1, verts=SEG)                           # lower bowl
+cut(b1, cyl(0.85, 0.2, z=2.2, verts=SEG))
+cyl(0.18, 0.6, z=2.5, verts=12)
+b2 = cyl(0.55, 0.16, z=2.85, verts=16)                          # upper bowl
+cut(b2, cyl(0.45, 0.14, z=2.92, verts=16))
+cyl(0.1, 0.3, z=3.05, verts=8)                                  # finial
+neon_ring = cyl(2.47, 0.03, z=0.96, verts=SEG); neon_ring.name = 'neon'
+inner = cyl(2.42, 0.05, z=0.96, verts=SEG)
+cut(neon_ring, inner)
+export('fountain')
+
+# ---------------------------------------------------------------- crate ----
+# 1.2 m wooden crate: frame edges proud of the planks, plank grooves.
+reset()
+C = 1.2
+box(C, C, C, z=C / 2)
+for sx in (-1, 1):
+    for sf in (-1, 1):
+        box(0.12, 0.12, C + 0.02, x=sx * (C / 2 - 0.05), f=sf * (C / 2 - 0.05), z=C / 2)      # vertical posts
+for zz in (0.06, C - 0.06):
+    for sf in (-1, 1):
+        box(C + 0.02, 0.12, 0.12, f=sf * (C / 2 - 0.05), z=zz)
+    for sx in (-1, 1):
+        box(0.12, C + 0.02, 0.12, x=sx * (C / 2 - 0.05), z=zz)
+for sf in (-1, 1):                                              # diagonal braces on two faces
+    br = box(0.1, 0.06, C * 1.25, f=sf * (C / 2 + 0.01), z=C / 2)
+    br.rotation_euler = (0, math.radians(45), 0)
+    bpy.context.view_layer.objects.active = br
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+# one neon rim round the lid (the frame itself stays plain: glow on every
+# plank read as noise)
+for sf in (-1, 1):
+    neon(C + 0.04, N, N, f=sf * (C / 2 + 0.02), z=C + 0.01)
+    neon(N, C + 0.04, N, x=sf * (C / 2 + 0.02), z=C + 0.01)
+export('crate')
+
+# ----------------------------------------------------------- crate stack ---
+# Two crates side by side and one on top, slightly turned: chest-high and
+# head-high cover in one piece (2.5 x 1.3 m footprint).
+reset()
+def crate_at(x0, f0, z0, turn=0.0):
+    parts = [box(C, C, C, x=x0, f=f0, z=z0 + C / 2)]
+    for sx in (-1, 1):
+        for sf in (-1, 1):
+            parts.append(box(0.12, 0.12, C + 0.02, x=x0 + sx * (C / 2 - 0.05), f=f0 + sf * (C / 2 - 0.05), z=z0 + C / 2))
+    for zz in (0.06, C - 0.06):
+        for sf in (-1, 1):
+            parts.append(box(C + 0.02, 0.12, 0.12, x=x0, f=f0 + sf * (C / 2 - 0.05), z=z0 + zz))
+    return parts
+crate_at(-0.63, 0, 0)
+crate_at(0.63, 0.05, 0)
+for o in crate_at(-0.2, 0, C):
+    o.rotation_euler = (0, 0, 0.25)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+# neon along the top of the lower pair, front and back
+for sf in (-1, 1):
+    neon(2 * C + 0.08, N, N, f=sf * (C / 2 + 0.03), z=C + 0.01)
+export('cratestack')
+
+# -------------------------------------------------------------- planter ----
+# Stone planter, waist high: plinth, body, projecting cap, a clipped hedge
+# block on top (counts as cover up to 1.3 m). 3 x 1.2 m.
+reset()
+PW, PD = 3.0, 1.2
+box(PW + 0.1, PD + 0.1, 0.15, z=0.075)
+box(PW, PD, 0.6, z=0.45)
+box(PW + 0.12, PD + 0.12, 0.1, z=0.8)
+hedge = box(PW - 0.3, PD - 0.3, 0.5, z=1.05)
+neon(PW + 0.12, N, N, f=(PD + 0.12) / 2 + 0.01, z=0.8)
+neon(PW + 0.12, N, N, f=-(PD + 0.12) / 2 - 0.01, z=0.8)
+export('planter')
+
+# ------------------------------------------------------------ cover wall ---
+# 1 m of low stone wall (stretched in the game): plinth, body, chunky cap.
+# 1.1 m tall: a standing player shoots over it, a crouching one hides.
+reset()
+box(1.0, 0.7, 0.15, z=0.075)
+box(1.0, 0.55, 0.85, z=0.575)
+box(1.0, 0.68, 0.12, z=1.06)
+neon(1.0, N, N, f=0.35, z=1.0)
+neon(1.0, N, N, f=-0.35, z=1.0)
+export('coverwall')
+
+# ---------------------------------------------------------- market stall ---
+# Counter (waist-high cover) under a sloped canopy on four posts, with a
+# back shelf. 3 x 2 m footprint, 2.9 m tall at the front.
+reset()
+SWD, SDP = 3.0, 2.0
+box(SWD, 0.6, 1.0, f=SDP / 2 - 0.3, z=0.5)                      # counter
+box(SWD + 0.1, 0.72, 0.08, f=SDP / 2 - 0.3, z=1.04)            # counter top
+box(SWD, 0.4, 1.6, f=-SDP / 2 + 0.2, z=0.8)                     # back shelf
+for zz in (0.55, 1.05):
+    box(SWD - 0.2, 0.42, 0.05, f=-SDP / 2 + 0.25, z=zz + 0.25)
+for sx in (-1, 1):
+    for sf, hh in ((1, 2.6), (-1, 3.0)):
+        box(0.12, 0.12, hh, x=sx * (SWD / 2 - 0.06), f=sf * (SDP / 2 - 0.06), z=hh / 2)
+can = box(SWD + 0.4, SDP + 0.6, 0.06, z=2.8)
+can.rotation_euler = (math.atan2(0.4, SDP), 0, 0)               # slopes down to the front
+bpy.context.view_layer.objects.active = can
+bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+for k in range(6):
+    box((SWD + 0.4) / 12, 0.03, 0.22 if k % 2 == 0 else 0.16, x=-(SWD + 0.4) / 2 + (SWD + 0.4) / 12 + k * (SWD + 0.4) / 6, f=SDP / 2 + 0.3, z=2.5)
+neon(SWD + 0.1, N, N, f=SDP / 2 + 0.07, z=1.0)
+export('stall')
+print('kit+ done ->', out)

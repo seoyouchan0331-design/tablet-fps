@@ -66,7 +66,7 @@ test('Blender props become pieces with their real size, and build geometry', () 
   // turned 90 degrees: its 6 m length now runs along z
   assert.ok(g.boundingBox.max.z - g.boundingBox.min.z > 6);
   assert.ok(near(g.boundingBox.min.y, 0, 1e-3));
-  assert.ok(edgeGeometries(prop('fountain', 0, 0), 0.05).length > 20);
+  assert.ok(edgeGeometries(prop('fountain', 0, 0), 0.05).length >= 1, 'modelled neon ring');
   assert.throws(() => prop('nope', 0, 0));
 });
 
@@ -136,5 +136,15 @@ test('stair flight: drawn steps plus a hidden ramp that climbs the same way', ()
     assert.ok(topAt(ramp, 10 + v[0] * 5.4, 5 + v[1] * 5.4) > 2.9, `${dir} head`);
     // the drawn steps cover the same footprint
     assert.ok(Math.abs(steps.x - ramp.x) < 0.25 && Math.abs(steps.z - ramp.z) < 0.25, `${dir} steps off the ramp`);
+  }
+});
+
+test('no slot between the floors: the outer wall is solid at every height', () => {
+  for (const ornate of [false, true]) {
+    const B = building({ x: 0, z: 0, w: 10, d: 8, ornate, doors: [{ side: '+z', at: -2.5 }], windows: [{ side: '+z', floor: 1, at: 2.5 }] });
+    // a point on the +z wall away from every opening, from the floor to the roof
+    for (let y = 0.05; y < 6.4; y += 0.1) { // samples between, not on, piece boundaries
+      assert.ok(solidAt(B.filter((b) => !b.deco), 0.5, y, 3.82), `gap in the wall at ${y.toFixed(1)} m (ornate ${ornate})`);
+    }
   }
 });

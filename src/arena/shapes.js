@@ -199,7 +199,7 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
   ];
   for (let f = 0; f < 2; f++) {
     const y0 = f * fh;
-    const h = f === 0 ? fh - slab : fh;
+    const h = fh; // walls meet the next floor: ending at the slab's underside left a 0.3 m slot all round
     // long walls run along x (their openings' `at` is an x offset), short along z
     const shift = (list, k) => list.map((o) => ({ ...o, c: o.c + k }));
     // Walls carry no neon of their own: the building's glow is its frame
