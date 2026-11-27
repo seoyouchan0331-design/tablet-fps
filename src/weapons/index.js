@@ -638,7 +638,7 @@ export class WeaponSystem {
       // Only the two loadout weapons are reachable.
       if (input.pressed('Digit1')) this.setWeapon(this.loadout.primary);
       if (input.pressed('Digit2')) this.setWeapon(this.loadout.secondary);
-      if (input.pressed('Tab') || input.wheel) this.setWeapon(this.loadout.other(this.activeId));
+      if (input.actionPressed('swapWeapon') || input.wheel) this.setWeapon(this.loadout.other(this.activeId));
       this._runTrigger(dt, input.fire, input.firePressed, def, s);
       st.trigger = input.fire && this.canFire();
       // Auto-reload on a dry trigger pull, like every modern shooter.

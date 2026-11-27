@@ -1,5 +1,7 @@
 import { Engine } from './core/engine.js';
 import { createConfig, detectTouch, pickDefaultQuality } from './core/config.js';
+import { loadSettings } from './core/settings.js';
+import { setBindings } from './core/input.js';
 
 import { RenderSystem } from './render/index.js';
 import { LiteRenderSystem } from './render/lite.js';
@@ -36,9 +38,18 @@ const config = createConfig({
   dynamicResolution: !capture && (params.get('dynres') ?? (touch ? '1' : '0')) === '1',
 });
 
+// Per-device player settings: key bindings, touch layout, touch look speed.
+const settings = capture ? null : loadSettings();
+if (settings) {
+  setBindings(settings.bindings);
+  config.touchSensitivityBase = config.touchSensitivity;
+  config.touchSensitivity *= settings.touch.lookSens;
+}
+
 const canvas = document.getElementById('game');
 
 const engine = new Engine({ canvas, config });
+if (settings) engine.ctx.settings = settings;
 
 // Registration order is irrelevant — Registry topo-sorts on static deps.
 // Tablets get the lite forward renderer and no sky (see src/render/lite.js).

@@ -408,8 +408,10 @@ export class Movement {
       if (cmd.pronePressed) {
         this.stanceWant = this.stanceWant === 'prone' ? 'crouch' : 'prone';
       }
-      // Sprinting always stands you up — CoD does not let you sprint crouched.
-      if (cmd.sprintHeld && rawInput > 0.5 && this.stanceWant !== 'stand' && cmd.moveY > 0.5) {
+      // A fresh sprint press stands you up. Only the PRESS: on a tablet the
+      // stick at full deflection is a held sprint, and "held stands you up"
+      // made crouching while moving impossible.
+      if (cmd.sprintPressed && rawInput > 0.5 && this.stanceWant !== 'stand' && cmd.moveY > 0.5) {
         this.stanceWant = 'stand';
       }
       if (cmd.jump && this.stanceWant !== 'stand') this.stanceWant = 'stand';

@@ -11,6 +11,7 @@
  * routes DOM touches into it and draws the stick + an FPS readout.
  */
 import { el, setStyle } from './util.js';
+import { saveSettings, defaultSettings, TOUCH_SCALE } from '../core/settings.js';
 
 const STICK_ZONE = 0.4; // fraction of screen width that spawns the joystick
 
@@ -31,17 +32,27 @@ const CSS = `
   border: 2px solid rgba(255,255,255,.3); background: rgba(10,14,18,.18); pointer-events: none; display: none; }
 .ow-touch .knob { position: absolute; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
   background: rgba(255,255,255,.45); pointer-events: none; display: none; }
+.ow-touch.editing .tb { outline: 2px dashed #3df2ff; outline-offset: 3px; background: rgba(61,242,255,.18); }
+.ow-touch .edit-panel { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); display: none; gap: 12px;
+  align-items: center; padding: 10px 14px; border-radius: 14px; background: rgba(6,9,12,.88); color: #e8f4f8;
+  font: 600 14px "Inter","Helvetica Neue",Arial,sans-serif; touch-action: auto; z-index: 2; }
+.ow-touch.editing .edit-panel { display: flex; }
+.ow-touch .edit-panel button { min-height: 44px; padding: 0 16px; border-radius: 22px; border: 2px solid rgba(61,242,255,.5);
+  background: #10181d; color: #e8f4f8; font: 700 14px "Inter","Helvetica Neue",Arial,sans-serif; }
+.ow-touch .edit-panel button.primary { background: #3df2ff; color: #031015; border-color: #3df2ff; }
+.ow-touch .edit-panel input[type=range] { width: 160px; }
 .ow-touch .fps { position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
   padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,.45); color: #cfe; font: 600 11px ui-monospace,monospace; }
 `;
 
-// [label, code, right, bottom] — a column/arc above and beside the fire button
+// [id, label, virtual code, right, bottom] — default arc around the fire button.
+// Touch buttons press their own Touch* codes, so keyboard rebinding never moves them.
 const BUTTONS = [
-  ['R', 'KeyR', 'calc(7% + 108px)', 'calc(26% - 30px)'],
-  ['JUMP', 'Space', 'calc(7% + 22px)', 'calc(26% + 108px)'],
-  ['CROUCH', 'KeyC', 'calc(7% + 22px)', 'calc(26% - 66px)'],
-  ['SWAP', 'Tab', 'calc(7% + 190px)', 'calc(26% + 10px)'],
-  ['DASH', 'TouchDash', 'calc(7% + 108px)', 'calc(26% + 118px)'],
+  ['reload', 'R', 'TouchReload', 'calc(7% + 108px)', 'calc(26% - 30px)'],
+  ['jump', 'JUMP', 'TouchJump', 'calc(7% + 22px)', 'calc(26% + 108px)'],
+  ['crouch', 'CROUCH', 'TouchCrouch', 'calc(7% + 22px)', 'calc(26% - 66px)'],
+  ['swap', 'SWAP', 'TouchSwap', 'calc(7% + 190px)', 'calc(26% + 10px)'],
+  ['dash', 'DASH', 'TouchDash', 'calc(7% + 108px)', 'calc(26% + 118px)'],
 ];
 
 export class TouchControls {
@@ -58,16 +69,22 @@ export class TouchControls {
     this.ring = el('div', 'ring', this.root);
     this.knob = el('div', 'knob', this.root);
 
+    /** id -> button element, for layout editing */
+    this.buttons = new Map();
     this.fireBtn = el('div', 'tb fire', this.root, 'FIRE');
     this.fireBtn.dataset.zone = 'fire';
     this.adsBtn = el('div', 'tb ads', this.root, 'ADS');
     this.adsBtn.dataset.action = 'ads';
-    for (const [label, code, right, bottom] of BUTTONS) {
+    this.buttons.set('fire', this.fireBtn);
+    this.buttons.set('ads', this.adsBtn);
+    for (const [id, label, code, right, bottom] of BUTTONS) {
       const b = el('div', 'tb sm', this.root, label);
       b.dataset.code = code;
+      b.dataset.id = id;
       if (code === 'TouchDash') this.dashBtn = b;
       setStyle(b, 'right', right);
       setStyle(b, 'bottom', bottom);
+      this.buttons.set(id, b);
     }
     const pause = el('div', 'tb sm', this.root, 'II');
     pause.dataset.code = 'Escape';
@@ -75,6 +92,47 @@ export class TouchControls {
     setStyle(pause, 'top', '16px');
     setStyle(pause, 'width', '44px');
     setStyle(pause, 'height', '44px');
+    this.buttons.set('pause', pause);
+    for (const [id, b] of this.buttons) {
+      b.dataset.id = id;
+      b.dataset.defRight = b.style.right;
+      b.dataset.defBottom = b.style.bottom;
+      b.dataset.defTop = b.style.top;
+    }
+
+    // ---- layout editing ----------------------------------------------------
+    this.editing = false;
+    this._drag = null;
+    this.panel = el('div', 'edit-panel', this.root);
+    el('span', null, this.panel, 'Drag buttons · Size');
+    this.sizeInput = el('input', null, this.panel);
+    this.sizeInput.type = 'range';
+    this.sizeInput.min = String(TOUCH_SCALE.min);
+    this.sizeInput.max = String(TOUCH_SCALE.max);
+    this.sizeInput.step = '0.05';
+    this.sizeInput.dataset.act = 'touch-size';
+    this.sizeInput.addEventListener('input', () => {
+      this.settings.touch.scale = Number(this.sizeInput.value);
+      this.applyLayout();
+      this._save();
+    });
+    const reset = el('button', null, this.panel, 'RESET');
+    reset.type = 'button';
+    reset.dataset.act = 'touch-reset';
+    reset.addEventListener('click', () => {
+      this.settings.touch.layout = {};
+      this.settings.touch.scale = 1;
+      this.sizeInput.value = '1';
+      this.applyLayout();
+      this._save();
+    });
+    const done = el('button', 'primary', this.panel, 'DONE');
+    done.type = 'button';
+    done.dataset.act = 'touch-done';
+    done.addEventListener('click', () => this.setEditing(false));
+    this._onResize = () => this.applyLayout();
+    addEventListener('resize', this._onResize);
+    this.applyLayout();
 
     this.fps = el('div', 'fps', this.root, '-- fps');
     this.fps.dataset.action = 'fps';
@@ -95,7 +153,48 @@ export class TouchControls {
     this.root.addEventListener('touchcancel', this._onEnd, opt);
   }
 
+  get settings() {
+    return this.ctx.settings ?? (this.ctx.settings = defaultSettings());
+  }
+
+  _save() {
+    saveSettings(this.settings);
+  }
+
+  /** Put every button at its saved spot (or default) and apply the size. */
+  applyLayout() {
+    const t = this.settings.touch;
+    for (const [id, b] of this.buttons) {
+      const p = t.layout[id];
+      if (p) {
+        setStyle(b, 'right', 'auto');
+        setStyle(b, 'bottom', 'auto');
+        setStyle(b, 'left', `${Math.round(p.x * innerWidth - b.offsetWidth / 2)}px`);
+        setStyle(b, 'top', `${Math.round(p.y * innerHeight - b.offsetHeight / 2)}px`);
+      } else {
+        // '' drops the inline value, so buttons placed by CSS (fire, ads)
+        // fall back to their stylesheet position instead of 'auto'.
+        setStyle(b, 'left', '');
+        setStyle(b, 'top', b.dataset.defTop || '');
+        setStyle(b, 'right', b.dataset.defRight || '');
+        setStyle(b, 'bottom', b.dataset.defBottom || '');
+      }
+      setStyle(b, 'transform', `scale(${t.scale})`);
+    }
+    this.sizeInput.value = String(t.scale);
+  }
+
+  /** Layout edit mode: buttons drag instead of acting; the game ignores touches. */
+  setEditing(on) {
+    this.editing = on;
+    this._drag = null;
+    this.root.classList.toggle('editing', on);
+    this.input.touchState.cancelAll();
+    this.ctx.peek('player')?.setControlEnabled?.(!on);
+  }
+
   _onStart(e) {
+    if (this.editing) return this._editStart(e);
     e.preventDefault(); // also suppresses emulated mouse events and double-tap zoom
     const ts = this.input.touchState;
     for (const t of e.changedTouches) {
@@ -118,13 +217,38 @@ export class TouchControls {
     }
   }
 
+  _editStart(e) {
+    if (e.target.closest?.('.edit-panel')) return; // let the slider and buttons work
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const b = t?.target.closest?.('.tb');
+    if (b) this._drag = { id: b.dataset.id, el: b, touch: t.identifier };
+  }
+
   _onMove(e) {
+    if (this.editing) {
+      if (e.target.closest?.('.edit-panel')) return;
+      e.preventDefault();
+      const d = this._drag;
+      if (!d) return;
+      for (const t of e.changedTouches) {
+        if (t.identifier !== d.touch) continue;
+        this.settings.touch.layout[d.id] = { x: t.clientX / innerWidth, y: t.clientY / innerHeight };
+        this.applyLayout();
+      }
+      return;
+    }
     e.preventDefault();
     const ts = this.input.touchState;
     for (const t of e.changedTouches) ts.move(t.identifier, t.clientX, t.clientY);
   }
 
   _onEnd(e) {
+    if (this.editing) {
+      if (this._drag) this._save();
+      this._drag = null;
+      return;
+    }
     e.preventDefault();
     const ts = this.input.touchState;
     for (const t of e.changedTouches) {
@@ -181,6 +305,7 @@ export class TouchControls {
   }
 
   dispose() {
+    removeEventListener('resize', this._onResize);
     this.input.touchState.cancelAll();
     this.root.remove();
     this.style.remove();

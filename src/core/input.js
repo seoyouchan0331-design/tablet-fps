@@ -13,18 +13,30 @@ export const ACTIONS = {
   back: ['KeyS', 'ArrowDown'],
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
-  jump: ['Space'],
-  crouch: ['ControlLeft', 'KeyC'],
+  jump: ['Space', 'TouchJump'],
+  crouch: ['ControlLeft', 'KeyC', 'TouchCrouch'],
   sprint: ['ShiftLeft', 'TouchSprint'],
-  reload: ['KeyR'],
-  use: ['KeyF'],
-  melee: ['KeyV'],
+  reload: ['KeyR', 'TouchReload'],
   dash: ['KeyQ', 'TouchDash'],
-  swapWeapon: ['Digit1', 'Digit2', 'Tab'],
-  grenade: ['KeyG'],
-  flashlight: ['KeyT'],
+  fire: ['KeyF'],
+  ads: ['KeyE'],
+  swapWeapon: ['Tab', 'TouchSwap'],
   pause: ['Escape'],
 };
+
+/** Virtual codes the touch overlay presses; they stay bound whatever the keyboard map is. */
+const TOUCH_CODES = {
+  sprint: ['TouchSprint'], dash: ['TouchDash'], jump: ['TouchJump'], crouch: ['TouchCrouch'],
+  reload: ['TouchReload'], swapWeapon: ['TouchSwap'],
+};
+
+/** Apply keyboard bindings (src/core/settings.js) to the live action map. */
+export function setBindings(bindings) {
+  for (const [action, codes] of Object.entries(bindings)) {
+    if (!Array.isArray(codes)) continue;
+    ACTIONS[action] = [...codes, ...(TOUCH_CODES[action] ?? [])];
+  }
+}
 
 export class Input {
   constructor(canvas, config) {
@@ -276,15 +288,15 @@ export class Input {
   }
 
   get fire() {
-    return this.down.has('Mouse0');
+    return this.down.has('Mouse0') || this.action('fire');
   }
 
   get firePressed() {
-    return this._pressed.has('Mouse0');
+    return this._pressed.has('Mouse0') || this.actionPressed('fire');
   }
 
   get ads() {
-    return this.down.has('Mouse2');
+    return this.down.has('Mouse2') || this.action('ads');
   }
 
   /** Normalised WASD + left-stick movement, clamped to the unit disc so

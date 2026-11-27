@@ -29,3 +29,17 @@ test('killing blow floors at 0 and reports killed once', () => {
   assert.equal(again.killed, false, 'already dead: no second kill');
   assert.equal(again.amount, 0);
 });
+
+import { hitboxAt } from '../src/opponent/hitbox.js';
+
+test('crouched hitboxes are lower; k interpolates between standing and crouched', () => {
+  const stand = hitboxAt(0);
+  const crouch = hitboxAt(1);
+  assert.equal(stand.headY, HITBOX.head.y);
+  assert.equal(stand.bodyY1, HITBOX.body.y1);
+  assert.ok(crouch.headY < 1.15 && crouch.headY > 0.9, String(crouch.headY));
+  assert.ok(crouch.bodyY1 < stand.bodyY1);
+  assert.ok(crouch.headY - HITBOX.head.radius >= crouch.bodyY1 - 0.05, 'head still above the body');
+  const half = hitboxAt(0.5);
+  assert.ok(half.headY < stand.headY && half.headY > crouch.headY);
+});

@@ -443,7 +443,7 @@ export class MatchSystem {
         // Sender timestamps keep 30 Hz snapshots evenly spaced even when Wi-Fi
         // delivers them in bursts (receive time would collapse a burst to one).
         const t = this.clock && Number.isFinite(m.t) ? this.clock.map(m.t, now) : now;
-        this.ctx.peek('opponent')?.push(t, { x: m.x, y: m.y, z: m.z, yaw: m.yaw, alive: !!m.alive, air: !!m.air });
+        this.ctx.peek('opponent')?.push(t, { x: m.x, y: m.y, z: m.z, yaw: m.yaw, alive: !!m.alive, air: !!m.air, crouch: !!m.crouch });
         break;
       }
       case MSG.REMATCH:
@@ -504,6 +504,7 @@ export class MatchSystem {
         this._send(MSG.STATE, {
           t: raw,
           air: p.movement ? !p.movement.grounded : false,
+          crouch: p.movement ? p.movement.stance !== 'stand' : false,
           x: pos.x, y: pos.y, z: pos.z,
           yaw: p.movement?.yaw ?? 0,
           alive: this.alive[this.role] && !p.dead,

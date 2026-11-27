@@ -240,12 +240,12 @@ export class PlayerSystem {
     const eye = this.eyePosition;
     const m = this.movement;
     // Aim point: chest, or the head when the crosshair is already above the neck.
-    const t = st.target.set(avatar.position.x, avatar.position.y + 1.15, avatar.position.z);
+    const t = st.target.set(avatar.position.x, avatar.position.y + (avatar.headY ?? 1.62) * 0.71, avatar.position.z);
     let dx = t.x - eye.x, dy = t.y - eye.y, dz = t.z - eye.z;
     let horiz = Math.hypot(dx, dz);
     let yaw = Math.atan2(-dx, -dz);
     let pitch = Math.atan2(dy, horiz);
-    const headPitch = Math.atan2(avatar.position.y + 1.62 - eye.y, horiz);
+    const headPitch = Math.atan2(avatar.position.y + (avatar.headY ?? 1.62) - eye.y, horiz);
     if (m.pitch > (pitch + headPitch) / 2) pitch = headPitch;
     let ey = yaw - m.yaw;
     ey -= Math.round(ey / (2 * Math.PI)) * 2 * Math.PI;

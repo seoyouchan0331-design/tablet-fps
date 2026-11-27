@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { HITBOX } from './hitbox.js';
+import { HITBOX, HITBOX_CROUCH, hitboxAt } from './hitbox.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { pickClip } from './gait.js';
 
@@ -18,6 +18,8 @@ const MODEL_URL = 'models/robot.glb';
 /** Robot head centre is ~3.52 model units up; put it on the head hitbox. */
 const ROBOT_SCALE = HITBOX.head.y / 3.52;
 const ACCENT = 0xff5a36;
+/** Crouch squashes the figure so its head lands on the crouched head hitbox. */
+const CROUCH_SQUASH = HITBOX_CROUCH.headY / HITBOX.head.y;
 const FADE = 0.15; // s crossfade between clips
 const CORPSE_S = 2.5; // how long the death pose stays visible
 
@@ -65,6 +67,10 @@ export class Avatar {
     this._speed = 0;
     this._air = false;
     this._corpseT = 0;
+    this._crouch = 0; // 0 standing .. 1 crouched (smoothed)
+    this._crouchTarget = 0;
+    this.headY = HITBOX.head.y;
+    this.bodyNode = null; // set by the builders: the node squashed when crouching
     this.mixer = null;
     this.actions = null;
     this.clip = null;
@@ -94,6 +100,8 @@ export class Avatar {
       this._owned.push(m);
     });
     this.root.add(model);
+    this.bodyNode = model;
+    this._baseScaleY = model.scale.y;
     this.mixer = new THREE.AnimationMixer(model);
     this.actions = {};
     for (const clip of gltf.animations) {
@@ -129,7 +137,11 @@ export class Avatar {
     const band = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.06, 0.28), this.glowMat);
     band.position.y = 1.2;
 
-    this.root.add(bodyMesh, head, band);
+    const fig = new THREE.Group();
+    fig.add(bodyMesh, head, band);
+    this.root.add(fig);
+    this.bodyNode = fig;
+    this._baseScaleY = 1;
     this._owned.push(this.bodyMat, this.glowMat);
   }
 
@@ -142,6 +154,11 @@ export class Avatar {
     next.reset().play();
     if (prev) next.crossFadeFrom(prev, FADE, false);
     this.clip = name;
+  }
+
+  /** Crouched flag from the network: lowers the figure and its hitboxes. */
+  setCrouch(on) {
+    this._crouchTarget = on ? 1 : 0;
   }
 
   /** Airborne flag from the network / dummy (drives the Jump clip). */
@@ -157,6 +174,8 @@ export class Avatar {
     this._prev.copy(this.position);
     const inst = Math.hypot(dx, dz) / dt;
     this._speed += (Math.min(inst, 20) - this._speed) * Math.min(1, dt * 10);
+    this._crouch += (this._crouchTarget - this._crouch) * Math.min(1, dt * 12);
+    if (this.bodyNode) this.bodyNode.scale.y = this._baseScaleY * (1 + (CROUCH_SQUASH - 1) * this._crouch);
     if (!this.alive) {
       this._corpseT -= dt;
       if (this._corpseT <= 0) this.root.visible = false;
@@ -171,9 +190,11 @@ export class Avatar {
     this.position.set(x, y, z);
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw;
-    const hy = y + HITBOX.head.y;
+    const hb = hitboxAt(this._crouch);
+    this.headY = hb.headY;
+    const hy = y + hb.headY;
     this.head.setSegment(x, hy, z, x, hy, z, HITBOX.head.radius);
-    this.body.setSegment(x, y + HITBOX.body.y0, z, x, y + HITBOX.body.y1, z, HITBOX.body.radius);
+    this.body.setSegment(x, y + hb.bodyY0, z, x, y + hb.bodyY1, z, HITBOX.body.radius);
   }
 
   setAlive(alive) {

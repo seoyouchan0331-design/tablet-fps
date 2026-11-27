@@ -15,6 +15,7 @@ import { PauseMenu } from './menu.js';
 import { CombatDemo } from './demo.js';
 import { TouchControls } from './touch.js';
 import { LoadoutPicker } from './loadout.js';
+import { ControlsPanel } from './controls.js';
 
 const KILL_FLASH_S = 0.12;
 
@@ -107,6 +108,22 @@ export class UiSystem {
     // The boot screen is now the duel main menu (MatchSystem); PRACTICE opens
     // this picker. Kept false here so the HUD never shows it on its own.
     this._loadoutPending = false;
+    this.controls = new ControlsPanel(host, ctx, {
+      onEditLayout: () => {
+        this.controls.hide();
+        this.menu.close();
+        // close() asks for pointer lock again; editing needs the cursor free,
+        // and losing that lock must not reopen the pause menu.
+        document.exitPointerLock?.();
+        this._hadPointerLock = false;
+        this.touch?.setEditing(true);
+      },
+      onClose: () => {},
+    });
+    const cb = el('button', 'ow-btn', this.menu.resumeBtn.parentNode, 'Controls');
+    cb.type = 'button';
+    cb.dataset.act = 'open-controls';
+    cb.addEventListener('click', () => this.controls.show());
     const lb = el('button', 'ow-btn', this.menu.resumeBtn.parentNode, 'Loadout');
     lb.type = 'button';
     lb.addEventListener('click', () => {
@@ -434,7 +451,7 @@ export class UiSystem {
       if (ctx.input.actionPressed('pause')) this.menu.toggle();
       // Losing pointer lock mid-match is the same intent as pressing Escape.
       if (ctx.input.pointerLocked) this._hadPointerLock = true;
-      else if (this._hadPointerLock && !this.menu.open) {
+      else if (this._hadPointerLock && !this.menu.open && !this.touch?.editing) {
         this._hadPointerLock = false;
         this.menu.show();
       }
@@ -642,6 +659,7 @@ export class UiSystem {
     this.menu.dispose();
     this.touch?.dispose();
     this.loadout.dispose();
+    this.controls.dispose();
     this.root.remove();
     removeStyles();
   }

@@ -29,3 +29,19 @@ export function applyDamage(hp, base, part) {
   const next = hp - amount;
   return { hp: next, killed: next <= 0, amount };
 }
+
+/** Crouched heights (metres above the feet); the player's crouch eye is ~1.02 m. */
+export const HITBOX_CROUCH = { headY: 1.06, bodyY1: 0.84 };
+
+/**
+ * Hitbox heights for a crouch amount k (0 standing .. 1 fully crouched).
+ * @returns {{headY:number, bodyY0:number, bodyY1:number}}
+ */
+export function hitboxAt(k) {
+  const t = Math.min(1, Math.max(0, k));
+  return {
+    headY: HITBOX.head.y + (HITBOX_CROUCH.headY - HITBOX.head.y) * t,
+    bodyY0: HITBOX.body.y0,
+    bodyY1: HITBOX.body.y1 + (HITBOX_CROUCH.bodyY1 - HITBOX.body.y1) * t,
+  };
+}

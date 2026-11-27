@@ -606,6 +606,7 @@ const CSS = `
 .ow-lite .ow-menu { backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 /* ================================================================== menu */
+.ow-closing, .ow-closing * { pointer-events: none !important; }
 .ow-menu {
   position:absolute; inset:0; pointer-events:auto;
   background: linear-gradient(105deg, rgba(4,6,8,.90) 0%, rgba(4,6,8,.72) 46%, rgba(4,6,8,.42) 100%);

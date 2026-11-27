@@ -182,6 +182,7 @@ export class PauseMenu {
   show() {
     if (this.open) return;
     this.open = true;
+    this.root.classList.remove('ow-closing');
     this.syncFromConfig();
     setStyle(this.root, 'display', '');
     document.exitPointerLock?.();
@@ -199,6 +200,10 @@ export class PauseMenu {
   close() {
     if (!this.open) return;
     this.open = false;
+    // Stop catching touches now, not when the fade-out ends: children carry
+    // their own pointer-events:auto, so the class switches off the whole tree.
+    setStyle(this.root, 'pointer-events', 'none');
+    this.root.classList.add('ow-closing');
     const t = this.ctx.time;
     if (t && this._prevScale !== undefined) t.scale = this._prevScale;
     this._prevScale = undefined;
