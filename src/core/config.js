@@ -22,10 +22,12 @@ export const QUALITY_PRESETS = {
   // Tablets / phones: integrated GPUs at DPR 2. Everything screen-space is off,
   // the pixel ratio is pinned to 1 and dynamic resolution trims the rest.
   mobile: {
-    renderScale: 0.7,
+    /** Tablet: the lite forward renderer (src/render/lite.js), no sky. */
+    lite: true,
+    renderScale: 0.75,
     /** Dynamic resolution starts at renderScale and may climb to this. */
     dynresMax: 1,
-    maxPixelRatio: 1,
+    maxPixelRatio: 2,
     shadowMapSize: 1024,
     cascades: 1,
     shadowDistance: 45,

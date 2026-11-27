@@ -4,10 +4,16 @@ import { createConfig, pickDefaultQuality, QUALITY_PRESETS } from '../src/core/c
 
 test('mobile preset is cheap', () => {
   const q = createConfig({ quality: 'mobile' }).q;
-  assert.ok(q.renderScale <= 0.7);
   for (const k of ['taa', 'gtao', 'ssr', 'volumetrics', 'motionBlur']) assert.equal(q[k], false, k);
   assert.equal(q.cascades, 1);
-  assert.equal(q.maxPixelRatio, 1);
+});
+
+test('mobile preset uses the lite renderer at up to Retina pixel ratio', () => {
+  const q = createConfig({ quality: 'mobile' }).q;
+  assert.equal(q.lite, true);
+  assert.equal(q.maxPixelRatio, 2);
+  assert.equal(q.renderScale, 0.75);
+  for (const [name, p] of Object.entries(QUALITY_PRESETS)) if (name !== 'mobile') assert.ok(!p.lite, name);
 });
 
 test('every preset has a pixel-ratio cap', () => {

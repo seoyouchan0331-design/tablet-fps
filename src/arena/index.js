@@ -46,15 +46,20 @@ export class ArenaSystem {
     this.mesh = new THREE.Mesh(mergeGeometries(boxGeos), this.material);
     this.mesh.name = 'arena-boxes';
     this.mesh.userData.surface = 'concrete';
+    this.mesh.castShadow = this.mesh.receiveShadow = true; // lite renderer's shadow map
     this.root.add(this.mesh);
     this.floorMaterial = new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 0.95, metalness: 0 });
     this.floor = new THREE.Mesh(floorGeo, this.floorMaterial);
     this.floor.name = 'arena-floor';
+    this.floor.receiveShadow = true;
     this.root.add(this.floor);
 
     // Neon edges are thin emissive bars, not GL lines: lines are 1 px on every
     // WebGL implementation and vanish on a Retina tablet.
-    this.lineMaterial = new THREE.MeshBasicMaterial({ color: NEON, toneMapped: false });
+    // Lite renderer has no HDR headroom: an HDR neon would clip to white there.
+    const lite = !!ctx.config.q?.lite;
+    const neon = lite ? new THREE.Color(0.0, 0.78, 1.0) : NEON;
+    this.lineMaterial = new THREE.MeshBasicMaterial({ color: neon, toneMapped: false });
     this.edges = new THREE.Mesh(mergeGeometries(edgeGeos), this.lineMaterial);
     this.edges.name = 'arena-neon';
     this.edges.userData.owNoShadow = true;

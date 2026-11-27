@@ -40,6 +40,20 @@ import { box, blob, latheZ, rodZ, dome, extrude, roundRect, ring, mergeAll } fro
  * the elbow FURTHER out of frame rather than into it, because a longer chain
  * between fixed endpoints bends more.
  */
+/**
+ * Detail level. `simple` (tablet / lite renderer) swaps every builder below for
+ * a few flat boxes and an 8-sided sleeve, keeping the exact same joint
+ * hierarchy so poses, grips and reload animation are untouched.
+ * Set it before the viewmodel constructs its Arms.
+ */
+export const HAND_DETAIL = { simple: false };
+
+function simpleBox(w, h, d, x, y, z) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(x, y, z);
+  return g;
+}
+
 const L_UPPER = 0.33;
 const L_FORE = 0.3;
 
@@ -100,6 +114,7 @@ function segmentSeam(len, r0, r1, sx) {
  * @returns {{root: THREE.Object3D, joints: THREE.Object3D[]}}
  */
 function buildFinger(materials, spec) {
+  if (HAND_DETAIL.simple) return buildFingerSimple(materials, spec);
   const { lengths, radii, curl, seamSide } = spec;
   const root = new THREE.Object3D();
   const joints = [];
@@ -150,8 +165,37 @@ function buildFinger(materials, spec) {
  * Glove: palm, thumb web, knuckle plate, wrist strap.
  * Fingers are added as children so they can be posed per-weapon.
  */
+function buildFingerSimple(materials, spec) {
+  const { lengths, radii, curl } = spec;
+  const root = new THREE.Object3D();
+  const joints = [];
+  let parent = root;
+  for (let i = 0; i < 3; i++) {
+    const j = new THREE.Object3D();
+    j.rotation.x = -curl[i];
+    parent.add(j);
+    const r = radii[i] * 1.9;
+    j.add(new THREE.Mesh(simpleBox(r, r * 0.9, lengths[i], 0, 0, -lengths[i] / 2), materials.glove));
+    const next = new THREE.Object3D();
+    next.position.z = -lengths[i];
+    j.add(next);
+    parent = next;
+    joints.push(j);
+  }
+  return { root, joints };
+}
+
+function buildGloveSimple(materials, scale) {
+  const root = new THREE.Object3D();
+  // palm block + wrist cuff
+  root.add(new THREE.Mesh(simpleBox(0.088 * scale, 0.032 * scale, 0.1 * scale, 0, 0, -0.05 * scale), materials.glove));
+  root.add(new THREE.Mesh(simpleBox(0.094 * scale, 0.04 * scale, 0.03 * scale, 0, 0, 0.005 * scale), materials.pad));
+  return root;
+}
+
 function buildGlove(materials, opts = {}) {
   const scale = opts.scale ?? 1;
+  if (HAND_DETAIL.simple) return buildGloveSimple(materials, scale);
   const w = 0.088 * scale;
   const h = 0.032 * scale;
   const palmLen = 0.098 * scale;
@@ -293,6 +337,18 @@ function buildGlove(materials, opts = {}) {
  * one absorbs it: 50 + 32 = 82 mm, which reaches with 10 mm of flexion in hand.
  */
 function buildThumb(materials, scale = 1, spec = THUMB) {
+  if (HAND_DETAIL.simple) {
+    const root = new THREE.Object3D();
+    const j1 = new THREE.Object3D();
+    root.add(j1);
+    const r = spec.r0 * scale * 1.9;
+    j1.add(new THREE.Mesh(simpleBox(r, r, spec.l0 * scale, 0, 0, -spec.l0 * scale / 2), materials.glove));
+    const j2 = new THREE.Object3D();
+    j2.position.z = -spec.l0 * scale;
+    j1.add(j2);
+    j2.add(new THREE.Mesh(simpleBox(r * 0.9, r * 0.9, spec.l1 * scale, 0, 0, -spec.l1 * scale / 2), materials.glove));
+    return { root, joints: [j1, j2] };
+  }
   const root = new THREE.Object3D();
   const j1 = new THREE.Object3D();
   root.add(j1);
@@ -335,6 +391,13 @@ const THUMB = { l0: 0.05, l1: 0.032, r0: 0.0115, r1: 0.0102, r2: 0.0078 };
  * exactly the "grey sausage" failure this rig has to avoid.
  */
 function buildSleeve(material, len, r0, r1, opts = {}) {
+  if (HAND_DETAIL.simple) {
+    // 8-sided tapered tube from z=0 (r0) to z=len (r1), the detailed sleeve's frame.
+    const g = new THREE.CylinderGeometry(r1, r0, len, 8, 1, false);
+    g.rotateX(Math.PI / 2);
+    g.translate(0, 0, len / 2);
+    return new THREE.Mesh(g, material);
+  }
   const parts = [];
   /**
    * SEGMENT COUNT. The support forearm's closest approach to the eye is ~0.38 m

@@ -9,6 +9,7 @@ import { buildSmg } from './models/smg.js';
 import { buildPistol } from './models/pistol.js';
 import { clamp, clamp01, lerp, damp, DEG } from './mathx.js';
 import { Loadout } from './loadout.js';
+import { HAND_DETAIL } from './hands.js';
 
 /**
  * WEAPONS — weapon meshes, the first-person viewmodel rig, ADS, recoil, sway,
@@ -133,6 +134,8 @@ export class WeaponSystem {
 
   async init(ctx) {
     this.ctx = ctx;
+    // Tablet build: low-poly arms/gloves (same rig, same poses).
+    HAND_DETAIL.simple = !!ctx.config.q?.lite;
     this.rng = ctx.rng.fork();
     this.mats = new WeaponMaterials(ctx);
     this.sim = new ProjectileSim(ctx);

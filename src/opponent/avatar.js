@@ -14,7 +14,7 @@ export class Avatar {
   /**
    * @param {THREE.Scene} scene
    * @param {object} physics  the physics system (addCollider / removeCollider / LAYER)
-   * @param {{ owner?: object, name?: string }} opts  owner is reported as the hit actor
+   * @param {{ owner?: object, name?: string, lite?: boolean }} opts  owner is reported as the hit actor; lite = no HDR glow
    */
   constructor(scene, physics, opts = {}) {
     this.scene = scene;
@@ -32,10 +32,12 @@ export class Avatar {
     add(new THREE.CylinderGeometry(0.06, 0.07, 0.1, 10), 0, 1.43, 0); // neck
     this.bodyMat = new THREE.MeshStandardMaterial({ color: BODY, roughness: 0.6, metalness: 0.1 });
     const bodyMesh = new THREE.Mesh(mergeGeometries(body), this.bodyMat);
+    bodyMesh.castShadow = true;
     for (const g of body) g.dispose();
 
     // Head and a chest band glow so the target reads at range and in shade.
-    this.glowMat = new THREE.MeshBasicMaterial({ color: GLOW, toneMapped: false });
+    const glow = opts.lite ? new THREE.Color(1.0, 0.32, 0.18) : GLOW;
+    this.glowMat = new THREE.MeshBasicMaterial({ color: glow, toneMapped: false });
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), this.glowMat);
     head.position.y = HITBOX.head.y;
     const band = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.06, 0.28), this.glowMat);

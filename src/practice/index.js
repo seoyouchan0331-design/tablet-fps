@@ -24,7 +24,7 @@ export class PracticeSystem {
     this.world = ctx.get('world');
     this.rng = ctx.rng.fork();
     this.dummy = { name: 'DUMMY', isAvatar: true, hp: MAX_HP };
-    this.avatar = new Avatar(ctx.scene, this.physics, { owner: this.dummy, name: 'practice-dummy' });
+    this.avatar = new Avatar(ctx.scene, this.physics, { owner: this.dummy, name: 'practice-dummy', lite: !!ctx.config.q?.lite });
     this.dummy.avatar = this.avatar;
     this._deadUntil = 0;
     this._phase = 0;

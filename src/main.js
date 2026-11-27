@@ -2,6 +2,7 @@ import { Engine } from './core/engine.js';
 import { createConfig, detectTouch, pickDefaultQuality } from './core/config.js';
 
 import { RenderSystem } from './render/index.js';
+import { LiteRenderSystem } from './render/lite.js';
 import { MaterialSystem } from './materials/index.js';
 import { SkySystem } from './sky/index.js';
 import { ArenaSystem } from './arena/index.js';
@@ -38,10 +39,11 @@ const canvas = document.getElementById('game');
 const engine = new Engine({ canvas, config });
 
 // Registration order is irrelevant — Registry topo-sorts on static deps.
+// Tablets get the lite forward renderer and no sky (see src/render/lite.js).
+const lite = !!config.q.lite;
 engine
-  .add(RenderSystem)
+  .add(lite ? LiteRenderSystem : RenderSystem)
   .add(MaterialSystem)
-  .add(SkySystem)
   .add(ArenaSystem)
   .add(PracticeSystem)
   .add(PhysicsSystem)
@@ -50,6 +52,7 @@ engine
   .add(FxSystem)
   .add(UiSystem)
   .add(AudioSystem);
+if (!lite) engine.add(SkySystem);
 
 try {
   await engine.init();
