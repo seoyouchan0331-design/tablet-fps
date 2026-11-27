@@ -38,6 +38,22 @@ const yaw = () => page.evaluate(() => window.__ENGINE__.ctx.peek('player').movem
 const frames = (n) => page.evaluate((n) => new Promise((r) => { let i = 0; const f = () => (++i >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const vp = page.viewportSize();
 
+await page.screenshot({ path: OUT.replace(/\.png$/, '-idle.png'), timeout: 240000 });
+
+// 0) DASH (keyboard Q works alongside touch): horizontal displacement over ~0.4 s
+const posXZ = () => page.evaluate(() => { const p = window.__ENGINE__.ctx.peek('player').position; return [p.x, p.z]; });
+const d0 = await posXZ();
+await page.keyboard.down('KeyQ');
+await frames(2);
+await page.keyboard.up('KeyQ');
+await page.waitForTimeout(400);
+const d1 = await posXZ();
+const dashDist = Math.hypot(d1[0] - d0[0], d1[1] - d0[1]);
+const cd = await page.evaluate(() => { const e = window.__ENGINE__; return e.ctx.peek('player').movement.dash.cooldownLeft(e.ctx.time.elapsed); });
+console.log('dash moved', dashDist.toFixed(2), 'm, cooldown left', cd.toFixed(2));
+if (dashDist < 1.5) fail('dash did not move the player');
+if (!(cd > 0)) fail('dash cooldown not running');
+
 // 1) drag on the right half rotates the camera
 const y0 = await yaw();
 await touch('touchStart', [{ x: vp.width * 0.7, y: vp.height * 0.4, id: 1 }]);

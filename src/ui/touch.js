@@ -42,6 +42,7 @@ const BUTTONS = [
   ['JUMP', 'Space', 'calc(7% + 22px)', 'calc(26% + 108px)'],
   ['CROUCH', 'KeyC', 'calc(7% + 22px)', 'calc(26% - 66px)'],
   ['SWAP', 'Tab', 'calc(7% + 190px)', 'calc(26% + 10px)'],
+  ['DASH', 'TouchDash', 'calc(7% + 108px)', 'calc(26% + 118px)'],
 ];
 
 export class TouchControls {
@@ -65,6 +66,7 @@ export class TouchControls {
     for (const [label, code, right, bottom] of BUTTONS) {
       const b = el('div', 'tb sm', this.root, label);
       b.dataset.code = code;
+      if (code === 'TouchDash') this.dashBtn = b;
       setStyle(b, 'right', right);
       setStyle(b, 'bottom', bottom);
     }
@@ -150,6 +152,15 @@ export class TouchControls {
       setStyle(this.knob, 'transform', `translate(${s.x}px,${s.y}px)`);
     }
     this.adsBtn.classList.toggle('on', this.input._adsToggled);
+    const dash = this.ctx.peek('player')?.movement?.dash;
+    if (dash && this.dashBtn) {
+      // Cooldown ring: the unlit arc is the time left before the next dash.
+      const left = dash.cooldownLeft(this.ctx.time.elapsed) / dash.cooldown;
+      const deg = Math.round((1 - left) * 360);
+      setStyle(this.dashBtn, 'background', left > 0
+        ? `conic-gradient(rgba(61,242,255,.45) ${deg}deg, rgba(10,14,18,.28) ${deg}deg)`
+        : 'rgba(61,242,255,.30)');
+    }
 
     this._frames++;
     this._acc += rawDt;

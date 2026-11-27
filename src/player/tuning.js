@@ -24,12 +24,15 @@ export const JUMP_APEX = 0.6;
 /** v = sqrt(2 g h) — solved from the apex so tuning the apex is meaningful. */
 export const JUMP_SPEED = Math.sqrt(2 * Math.abs(GRAVITY) * JUMP_APEX);
 
+/** Arena build: every horizontal speed is scaled up for a fast 1v1 duel. */
+export const SPEED_SCALE = 1.35;
+
 export const STANCE = {
   stand: {
     name: 'stand',
     height: UNITS.playerHeight, // 1.78
     eye: UNITS.playerHeight - UNITS.eyeOffset, // 1.66
-    speed: 4.57,
+    speed: SPEED_SCALE * 4.57,
     stepHeight: 0.42,
     strideLength: 1.48,
   },
@@ -37,7 +40,7 @@ export const STANCE = {
     name: 'crouch',
     height: UNITS.playerCrouchHeight, // 1.12
     eye: UNITS.playerCrouchHeight - 0.1, // 1.02
-    speed: 2.44,
+    speed: SPEED_SCALE * 2.44,
     stepHeight: 0.3,
     strideLength: 1.05,
   },
@@ -45,15 +48,15 @@ export const STANCE = {
     name: 'prone',
     height: 0.7, // capsule floor: 2 * radius = 0.64
     eye: 0.4,
-    speed: 1.01,
+    speed: SPEED_SCALE * 1.01,
     stepHeight: 0.14,
     strideLength: 0.78,
   },
 };
 
 export const MOVE = {
-  sprintSpeed: 7.01,
-  tacSprintSpeed: 8.38,
+  sprintSpeed: SPEED_SCALE * 7.01,
+  tacSprintSpeed: SPEED_SCALE * 8.38,
 
   /** Directional scaling — you are slower sideways and slower still backwards. */
   strafeScale: 0.92,
@@ -72,7 +75,9 @@ export const MOVE = {
   stopDecel: 30,
   /** Air control: a quarter of ground authority, and it cannot add speed. */
   airAccelScale: 0.25,
-  airSpeedCap: 3.4,
+  airSpeedCap: SPEED_SCALE * 3.4,
+  /** DASH: short burst along the move direction (see dash.js). */
+  dash: { cooldown: 3, duration: 0.15, speed: 22 },
   terminalSpeed: 55,
 
   /** Grace windows that hide input/timing error. */
@@ -89,9 +94,9 @@ export const MOVE = {
   sprintStartDelay: 0.05,
 
   slide: {
-    entrySpeed: 8.84,
+    entrySpeed: SPEED_SCALE * 8.84,
     /** Never slower than this on entry, so a slide always feels like a burst. */
-    minEntry: 6.2,
+    minEntry: SPEED_SCALE * 6.2,
     /** Speed at which the slide gives up and becomes a crouch walk. */
     exitSpeed: 2.95,
     duration: 0.9,

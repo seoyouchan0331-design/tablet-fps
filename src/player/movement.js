@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { STANCE, MOVE, GRAVITY, JUMP_SPEED, FOOTSTEP } from './tuning.js';
 import { LedgeProbe, MantleMotion, LEDGE_NONE, LEDGE_VAULT } from './mantle.js';
 import { clamp, clamp01, approach, lerp } from './springs.js';
+import { Dash } from './dash.js';
 
 export const STATES = [
   'stand', 'crouch', 'prone', 'sprint', 'tacsprint',
@@ -42,6 +43,9 @@ export class Movement {
     this.sprinting = false;
     this.tacticalSprint = false;
     this.sliding = false;
+    this.dash = new Dash(MOVE.dash);
+    this.dashing = false;
+    this._dashV = { x: 0, z: 0 };
     this.grounded = true;
     this.wasGrounded = true;
     this.airTime = 0;
@@ -101,13 +105,13 @@ export class Movement {
       moveX: 0, moveY: 0,
       jump: false, jumpHeld: false,
       crouchPressed: false, cronePressed: false, pronePressed: false,
-      sprintHeld: false, sprintPressed: false,
+      sprintHeld: false, sprintPressed: false, dashPressed: false,
       leanL: false, leanR: false,
       ads: false,
     };
     this._cmdFrame = -1;
     this._prevHeld = {
-      jump: false, crouch: false, prone: false, sprint: false,
+      jump: false, crouch: false, prone: false, sprint: false, dash: false,
     };
 
     // ---- interpolation for the camera ----------------------------------
@@ -193,7 +197,8 @@ export class Movement {
       cmd.sprintHeld = false; cmd.sprintPressed = false;
       cmd.leanL = false; cmd.leanR = false;
       cmd.ads = false;
-      prev.jump = prev.crouch = prev.prone = prev.sprint = false;
+      cmd.dashPressed = false;
+      prev.jump = prev.crouch = prev.prone = prev.sprint = prev.dash = false;
       return;
     }
 
@@ -215,6 +220,9 @@ export class Movement {
     cmd.leanL = input.action('leanLeft');
     cmd.leanR = input.action('leanRight');
     cmd.ads = input.ads;
+    const dash = input.action('dash');
+    cmd.dashPressed = dash && !prev.dash;
+    prev.dash = dash;
 
     prev.jump = jump;
     prev.crouch = crouch;
@@ -253,6 +261,7 @@ export class Movement {
       cmd.crouchPressed = false;
       cmd.pronePressed = false;
       cmd.sprintPressed = false;
+      cmd.dashPressed = false;
     }
 
     this.prevPosition.copy(this.position);
@@ -309,6 +318,8 @@ export class Movement {
       this._accelerateAir(h, wish, wishLen);
     }
 
+    this._applyDash(cmd, wish, wishLen);
+
     if (c.grounded && !jumped && v.y < 0) v.y = 0;
     v.y += GRAVITY * h;
     if (v.y < -MOVE.terminalSpeed) v.y = -MOVE.terminalSpeed;
@@ -337,6 +348,35 @@ export class Movement {
     this._updateLean(h, cmd);
     this._resolveState();
     this._publish();
+  }
+
+  /** DASH overrides horizontal velocity for its short window; the controller's
+   *  swept move below still resolves it against walls. */
+  _applyDash(cmd, wish, wishLen) {
+    const now = this.ctx.time.elapsed;
+    const v = this.velocity;
+    if (cmd.dashPressed) {
+      const dx = wishLen > 1e-4 ? wish.x : this._fwd.x;
+      const dz = wishLen > 1e-4 ? wish.z : this._fwd.z;
+      if (this.dash.tryStart(now, dx, dz)) {
+        if (this.sliding) this._endSlide(false);
+        this.ctx.events?.emit?.('player:dash', { x: dx, z: dz });
+      }
+    }
+    if (this.dash.velocity(now, this._dashV)) {
+      v.x = this._dashV.x;
+      v.z = this._dashV.z;
+      this.dashing = true;
+    } else if (this.dashing) {
+      // Leaving the dash: keep a burst, but never more than a slide entry.
+      this.dashing = false;
+      const sp = Math.hypot(v.x, v.z);
+      const cap = MOVE.slide.entrySpeed;
+      if (sp > cap) {
+        v.x *= cap / sp;
+        v.z *= cap / sp;
+      }
+    }
   }
 
   _tickTimers(h) {
@@ -515,7 +555,8 @@ export class Movement {
       // Preserve the burst but never let it compound into a speed exploit.
       const v = this.velocity;
       const sp = Math.hypot(v.x, v.z);
-      const cap = MOVE.sprintSpeed * 1.06;
+      // Arena: a slide-jump keeps the slide's burst (entry speed is the ceiling).
+      const cap = MOVE.slide.entrySpeed;
       if (sp > cap) {
         const s = cap / sp;
         v.x *= s; v.z *= s;
