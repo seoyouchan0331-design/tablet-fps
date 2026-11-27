@@ -187,13 +187,15 @@ export function wallWithOpenings({ axis = 'x', from, to, at, y0 = 0, h = 3, t = 
  * Detailing: a band between the floors, a cornice on the roof and square
  * pilasters on the corners, all a few cm proud of the walls.
  */
-export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [], windows = [], stair = '+x' }) {
+export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [], windows = [], stair = '+x', ornate = false }) {
   const hw = w / 2, hd = d / 2;
   const out = [];
   const opens = (side, floor) => [
     ...(floor === 0 ? doors.filter((o) => o.side === side).map((o) => ({ c: o.at, w: o.w ?? 1.6, bottom: 0, top: 2.4 })) : []),
     ...windows.filter((o) => o.side === side && (o.floor ?? 1) === floor)
-      .map((o) => ({ c: o.at, w: o.w ?? 1.4, bottom: floor === 0 ? 1.0 : 0.9, top: floor === 0 ? 2.1 : 2.2 })),
+      .map((o) => (ornate
+        ? { c: o.at, w: 1.4, bottom: 1.0, top: 2.2 }
+        : { c: o.at, w: o.w ?? 1.4, bottom: floor === 0 ? 1.0 : 0.9, top: floor === 0 ? 2.1 : 2.2 })),
   ];
   for (let f = 0; f < 2; f++) {
     const y0 = f * fh;
@@ -240,6 +242,7 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
   out.push({ x: (xIn + xOut) / 2, y: slabY, z: (zA + zB) / 2, w: xOut - xIn, h: slab, d: zB - zA, noEdge: true });
   const landA = sdir === '+x' ? r0 + run : xIn, landB = sdir === '+x' ? xOut : r0; // the landing at the stair head
   if (landB - landA > 0.05) out.push({ x: (landA + landB) / 2, y: slabY, z: zS, w: landB - landA, h: slab, d: sw, noEdge: true });
+  if (ornate) return [...out, ...ornament({ x, z, w, d, fh, slab, doors, windows })];
   // roof slab, cornice, string course, corner pilasters
   out.push({ x, y: 2 * fh + slab / 2, z, w, h: slab, d, noEdge: true });
   out.push({ x, y: 2 * fh + slab + 0.1, z, w: w + 0.3, h: 0.2, d: d + 0.3 }); // roofline: glows
@@ -252,6 +255,55 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
   out.push({ x: x - hw - sc / 2, y: fh, z, w: sc, h: scH, d });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     out.push({ x: x + sx * (hw - 0.22), y: fh + slab / 2, z: z + sz * (hd - 0.22), w: 0.56, h: 2 * fh + slab, d: 0.56 });
+  }
+  return out;
+}
+
+/**
+ * The Blender kit dressed onto a building() shell: carved corner pilasters, a
+ * cornice round the roof, a frame (with shutters) on every window, a frame on
+ * every door, and balconies / awnings where a window or door asks for one
+ * ({ balcony: true } on an upper window, { awning: true } on a door or a
+ * ground-floor window). Everything but the pilasters and the roof is deco.
+ */
+function ornament({ x, z, w, d, fh, slab, doors, windows }) {
+  const hw = w / 2, hd = d / 2;
+  const out = [];
+  // where a wall's outer face is, which way it faces, and how `at` runs along it
+  const face = {
+    '+z': (at) => ({ px: x + at, pz: z + hd, ry: 0 }),
+    '-z': (at) => ({ px: x + at, pz: z - hd, ry: Math.PI }),
+    '+x': (at) => ({ px: x + hw, pz: z + at, ry: Math.PI / 2 }),
+    '-x': (at) => ({ px: x - hw, pz: z + at, ry: -Math.PI / 2 }),
+  };
+  const roofY = 2 * fh;
+  out.push({ x, y: roofY + slab / 2, z, w, h: slab, d, noEdge: true }); // roof slab
+  // cornice on all four sides (1 m model stretched)
+  for (const [side, len] of [['+z', w + 0.8], ['-z', w + 0.8], ['+x', d], ['-x', d]]) {
+    const f = face[side](0);
+    out.push(prop('cornice', f.px, f.pz, f.ry, roofY + slab, { sx: len, deco: true }));
+  }
+  // floor band (thin strip that glows), as before
+  const sc = 0.08, scH = 0.18;
+  out.push({ x, y: fh, z: z + hd + sc / 2, w: w + 2 * sc, h: scH, d: sc });
+  out.push({ x, y: fh, z: z - hd - sc / 2, w: w + 2 * sc, h: scH, d: sc });
+  out.push({ x: x + hw + sc / 2, y: fh, z, w: sc, h: scH, d });
+  out.push({ x: x - hw - sc / 2, y: fh, z, w: sc, h: scH, d });
+  // carved corner pilasters (they collide: a player hugs a corner against them)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    out.push(prop('pilaster', x + sx * (hw - 0.22), z + sz * (hd - 0.22), 0, 0));
+  }
+  for (const o of windows) {
+    const f = face[o.side](o.at);
+    const y = (o.floor ?? 1) * fh + 1.0;
+    out.push(prop('window', f.px, f.pz, f.ry, y, { deco: true }));
+    if (o.balcony && (o.floor ?? 1) === 1) out.push(prop('balcony', f.px, f.pz, f.ry, fh + 0.05, { deco: true }));
+    if (o.awning && (o.floor ?? 1) === 0) out.push(prop('awning', f.px, f.pz, f.ry, y + 1.75, { deco: true }));
+  }
+  for (const o of doors) {
+    const f = face[o.side](o.at);
+    out.push(prop('doorframe', f.px, f.pz, f.ry, 0, { deco: true }));
+    if (o.awning) out.push(prop('awning', f.px, f.pz, f.ry, 3.05, { deco: true }));
   }
   return out;
 }

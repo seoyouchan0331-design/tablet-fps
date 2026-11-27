@@ -159,38 +159,41 @@ const TOWN_D = 36;
 const TOWN_HALF = [
   // corner house south-east of the plaza: door to the plaza, windows on both floors
   ...building({
-    x: 12, z: -10, w: 10, d: 7.5, stair: '+x',
-    doors: [{ side: '+z', at: -2.5 }, { side: '-x', at: 0.8 }],
+    x: 12, z: -10, w: 10, d: 7.5, stair: '+x', ornate: true,
+    doors: [{ side: '+z', at: -2.5, awning: true }, { side: '-x', at: 0.8 }],
     windows: [
-      { side: '+z', floor: 1, at: -2.5 }, { side: '+z', floor: 1, at: 2.5 }, { side: '+z', floor: 0, at: 2.5 },
-      { side: '+x', floor: 1, at: 0 }, { side: '-x', floor: 1, at: 0 },
+      { side: '+z', floor: 1, at: -2.5, balcony: true }, { side: '+z', floor: 1, at: 2.5 }, { side: '+z', floor: 0, at: 2.5 },
+      { side: '+x', floor: 1, at: 0 }, { side: '-x', floor: 1, at: -1.5 },
     ],
   }),
   // house north-east of the plaza
   ...building({
-    x: 13, z: 10, w: 9, d: 8, stair: '-x',
-    doors: [{ side: '-z', at: 1.5 }],
+    x: 13, z: 10, w: 9, d: 8, stair: '-x', ornate: true,
+    doors: [{ side: '-z', at: 1.5, awning: true }],
     windows: [
-      { side: '-z', floor: 1, at: -2 }, { side: '-z', floor: 1, at: 2 }, { side: '-x', floor: 1, at: 0 },
+      { side: '-z', floor: 1, at: -2, balcony: true }, { side: '-z', floor: 1, at: 2 }, { side: '-x', floor: 1, at: 0 },
       { side: '-x', floor: 0, at: -1.5 }, { side: '+x', floor: 1, at: 1 },
     ],
   }),
   // tall corner house by the spawn courtyard, overlooking the street
   ...building({
-    x: 25.5, z: -12.6, w: 9, d: 7.2, stair: '-x',
+    x: 25.5, z: -12.6, w: 9, d: 7.2, stair: '-x', ornate: true,
     doors: [{ side: '+z', at: -1.5 }],
-    windows: [{ side: '+z', floor: 1, at: 1.5 }, { side: '-x', floor: 1, at: 0 }, { side: '+x', floor: 1, at: 0 }],
+    windows: [{ side: '+z', floor: 1, at: 1.5, balcony: true }, { side: '-x', floor: 1, at: 0 }, { side: '+x', floor: 1, at: 0 }],
   }),
   // arched gateway between the plaza and the spawn courtyard
   prop('arch', 19.5, 0, Math.PI / 2),
   // spawn courtyard walls (the courtyard opens toward the plaza through the arch and its sides)
   { x: 27.5, y: 1.6, z: 6.5, w: 7, h: 3.2, d: 0.6 },
   { x: 27.5, y: 1.6, z: -6.5, w: 7, h: 3.2, d: 0.6 },
-  // market crates, turned, and a low wall with a window
+  // a three-arch colonnade closing the plaza's long side: cover with windows to shoot through
+  prop('colonnade', 0, 13.2, Math.PI),
+  // bell tower in the corner: the town's landmark
+  { ...prop('belltower', 29, 13.5), sym: true },
+  // market crates, turned
   { x: 6, y: 0.6, z: 3.5, w: 4, h: 1.2, d: 1.6, ry: Math.PI / 4 },
   { x: 4, y: 0.6, z: -7, w: 3, h: 1.2, d: 1.4, ry: -Math.PI / 6 },
   { x: 9.5, y: 0.5, z: 0.5, w: 1, h: 1, d: 1 },
-  ...windowWall({ axis: 'x', from: 1, to: 7, at: 13.5, h: 2.6, t: 0.5, sill: 0.9, top: 1.8, gap: 2 }),
   // street planter: crouch cover
   { x: 0, y: 0.3, z: -11, w: 6, h: 0.6, d: 1.2 },
 ];
