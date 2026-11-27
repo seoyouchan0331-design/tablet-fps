@@ -26,6 +26,8 @@ import { ClockSync } from './interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Lobby } from '../ui/lobby.js';
 import { RoundPick } from '../ui/roundpick.js';
+import { DeathRecap } from '../ui/deathrecap.js';
+import { killcamAngles } from './killcam.js';
 import { Loadout } from '../weapons/loadout.js';
 import { MAPS } from '../arena/layout.js';
 import { smoothRtt } from '../net/ice.js';
@@ -70,6 +72,9 @@ export class MatchSystem {
     this._v2 = new THREE.Vector3();
     this._from = new THREE.Vector3();
 
+    this.deathRecap = new DeathRecap(document.getElementById('ui') ?? document.body);
+    this._taken = []; // hits I took this round, for the recap
+    this._killcam = null;
     // Between rounds: re-pick the primary (applies at once, see RoundPick).
     this.roundPick = new RoundPick(document.getElementById('ui') ?? document.body, Loadout.PRIMARIES, (id) => {
       this.myPrimary = id;
@@ -288,6 +293,9 @@ export class MatchSystem {
       ui.state.scoreThem = ev.score[this.other];
     }
     if (ev.type === 'countdown') {
+      this.deathRecap.hide();
+      this._killcam = null;
+      this._taken = [];
       this.live = false;
       this.hp = { host: MAX_HP, guest: MAX_HP };
       this.alive = { host: true, guest: true };
@@ -331,6 +339,8 @@ export class MatchSystem {
 
   _teardownMatch() {
     this.roundPick?.hide();
+    this.deathRecap?.hide();
+    this._killcam = null;
     this.ctx.peek('world')?.load?.('grid'); // practice lives on GRID
     this.live = false;
     this.mode = null;
@@ -427,7 +437,7 @@ export class MatchSystem {
     const base = Math.min(Number(c.amount) || 0, def?.damage ?? 40);
     const r = applyDamage(this.hp[c.target], base, c.part);
     this.hp[c.target] = r.hp;
-    const body = { victim: c.target, amount: r.amount, headshot: c.part === 'head', killed: r.killed, hp: { ...this.hp }, from: c.from };
+    const body = { victim: c.target, amount: r.amount, headshot: c.part === 'head', killed: r.killed, hp: { ...this.hp }, from: c.from, weapon: c.weapon };
     this._send(MSG.HP, body);
     this._applyHp(body);
     if (r.killed) {
@@ -436,10 +446,43 @@ export class MatchSystem {
     }
   }
 
+  /** I died: say how, and swing the view to the killer. */
+  _onKilled(m) {
+    const player = this.ctx.peek('player');
+    const eye = player?.eyePosition;
+    const from = Array.isArray(m.from) ? { x: m.from[0], y: m.from[1], z: m.from[2] } : null;
+    const distance = eye && from ? Math.hypot(from.x - eye.x, from.y - eye.y, from.z - eye.z) : NaN;
+    this.deathRecap.show({
+      weapon: typeof m.weapon === 'string' ? m.weapon : '',
+      headshot: !!m.headshot,
+      distance,
+      hits: this._taken,
+      oppHp: m.hp?.[this.other],
+    });
+    const mv = player?.movement;
+    this._killcam = mv ? { t: 0, from: { yaw: mv.yaw, pitch: mv.pitch }, fallback: from } : null;
+  }
+
+  _stepKillcam(dt) {
+    const kc = this._killcam;
+    const player = this.ctx.peek('player');
+    if (!kc || !player?.movement) return;
+    kc.t += dt;
+    const av = this.ctx.peek('opponent')?.avatar;
+    const p = av?.root?.visible ? av.position : null;
+    const target = p ? { x: p.x, y: p.y + (av.headY ?? 1.5) * 0.85, z: p.z } : kc.fallback;
+    if (!target) return;
+    const a = killcamAngles(player.eyePosition, target, kc.from, kc.t / 0.6);
+    player.movement.yaw = a.yaw;
+    player.movement.pitch = a.pitch;
+  }
+
   _applyHp(m) {
     this.hp = m.hp;
     const ev = this.ctx.events;
     if (m.victim === this.role) {
+      this._taken.push({ amount: Number(m.amount) || 0, headshot: !!m.headshot });
+      if (m.killed) this._onKilled(m);
       this._from.fromArray(m.from ?? [0, 0, 0]);
       ev.emit('damage:dealt', { target: this.ctx.peek('player'), amount: m.amount, headshot: m.headshot, killed: m.killed, from: this._from, confirmed: true });
     } else if (m.killed) {
@@ -554,6 +597,7 @@ export class MatchSystem {
       return;
     }
     if (this.phase !== 'match') return;
+    this._stepKillcam(ctx.time.dt || dt);
     const raw = ctx.time.raw;
     const rawDt = Math.min(0.1, raw - (this._lastRaw ?? raw));
     this._lastRaw = raw;
@@ -591,5 +635,6 @@ export class MatchSystem {
     this.transport?.close();
     this.lobby.dispose();
     this.roundPick.dispose();
+    this.deathRecap.dispose();
   }
 }

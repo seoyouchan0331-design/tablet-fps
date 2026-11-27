@@ -99,6 +99,20 @@ const sc = await Promise.all([A, B].map((p) => match(p, () => window.__ENGINE__.
 step(`score after kill A=${JSON.stringify(sc[0])} B=${JSON.stringify(sc[1])}`);
 if (sc[0].host !== 1 || sc[1].host !== 1) fail('round win not recorded on both sides');
 
+// ---- B sees how it died, and the killcam turns B toward A --------------------------
+await B.waitForTimeout(900);
+const dr = await B.evaluate(() => {
+  const n = document.querySelector('[data-act="death-recap"]');
+  const e = window.__ENGINE__.ctx; const pl = e.peek('player'); const o = e.peek('opponent').avatar.position;
+  const eye = pl.eyePosition; const want = Math.atan2(-(o.x - eye.x), -(o.z - eye.z));
+  let d = want - pl.movement.yaw; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+  return { shown: n && getComputedStyle(n).display, text: n?.textContent ?? '', yawOff: Math.abs(d) * 57.3 };
+});
+step(`B recap "${dr.text.slice(0, 80)}", killcam off by ${dr.yawOff.toFixed(1)} deg`);
+if (dr.shown !== 'block') fail('no death recap on the victim');
+if (!/MPX-9 · SMG/.test(dr.text)) fail('recap does not name the SMG that killed B');
+if (dr.yawOff > 15) fail('killcam did not turn B toward A');
+
 // ---- between rounds: B switches to the shotgun ------------------------------------
 await waitAct(B, 'round-pick-shotgun', 15000).catch(() => fail('no weapon pick between rounds'));
 const pickShown = await B.evaluate(() => getComputedStyle(document.querySelector('.ow-rpick')).display);
