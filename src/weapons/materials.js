@@ -868,6 +868,17 @@ export const WEAPON_MATERIALS = {
  * materials that have no library equivalent (optic glass, illuminated reticle).
  * Those two are owned here and disposed here.
  */
+/** Flat palette for the low-poly (tablet) guns: [colour, roughness, metalness]. */
+const LOWPOLY_PALETTE = {
+  lp_body: [0x2f353d, 0.55, 0.15],
+  lp_metal: [0x7d8692, 0.35, 0.75],
+  lp_dark: [0x16191d, 0.6, 0.2],
+  lp_grip: [0x23272c, 0.85, 0.0],
+  lp_accent_rifle: [0xff7a1f, 0.45, 0.05],
+  lp_accent_smg: [0x19c3d6, 0.45, 0.05],
+  lp_accent_pistol: [0xffc21f, 0.45, 0.05],
+};
+
 export class WeaponMaterials {
   constructor(ctx) {
     this.ctx = ctx;
@@ -879,8 +890,20 @@ export class WeaponMaterials {
     this._fallbacks = new Map();
   }
 
+  /** Plain lit materials for the low-poly guns (no texture library, no masks). */
+  lowpoly(key) {
+    let m = this.cache.get(key);
+    if (m) return m;
+    const [color, roughness, metalness] = LOWPOLY_PALETTE[key] ?? [0x888888, 0.6, 0.1];
+    m = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    this.cache.set(key, m);
+    this.owned.push(m);
+    return m;
+  }
+
   /** @returns {THREE.Material} */
   get(key) {
+    if (key.startsWith('lp_')) return this.lowpoly(key);
     if (key === 'cavity') return this.cavity();
     if (key === 'optic_tube') return this.opticTube();
     if (key === 'glass') return this.glass();

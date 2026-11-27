@@ -320,7 +320,8 @@ export class Viewmodel {
 
     let tris = 0;
     const meshes = [];
-    const bake = this.mats.lib?.bakeMasks?.bind(this.mats.lib) ?? null;
+    // Low-poly guns use a flat palette: no curvature/grime masks to bake.
+    const bake = model.accent !== undefined ? null : (this.mats.lib?.bakeMasks?.bind(this.mats.lib) ?? null);
 
     const build = (asm, parent, wearScale = 1) => {
       const map = asm.build();

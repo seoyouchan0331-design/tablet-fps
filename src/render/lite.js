@@ -17,7 +17,7 @@
  */
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { DynRes } from '../core/dynres.js';
+import { DynRes, pixelRatioFor } from '../core/dynres.js';
 
 const BACKGROUND = 0xbfe3ff; // clear bright sky blue
 const SUN_DIR = new THREE.Vector3(0.45, 0.85, 0.3).normalize();
@@ -72,10 +72,9 @@ export class LiteRenderSystem {
 
     // ---- viewmodel lighting (drawn in its own scene) --------------------
     const view = ctx.viewScene;
-    // Weapon albedos were authored ~1/3 of physical to suit the AAA renderer's
-    // very hot viewmodel rig (see README); this rig is ~3x brighter to match.
-    this.viewHemi = new THREE.HemisphereLight(0xf2f8ff, 0x8a929c, 4.2);
-    this.viewSun = new THREE.DirectionalLight(0xfff4e2, 5.5);
+    // Low-poly guns use physical albedos (lowpoly.js palette), so a normal rig.
+    this.viewHemi = new THREE.HemisphereLight(0xf2f8ff, 0x6c737c, 1.5);
+    this.viewSun = new THREE.DirectionalLight(0xfff4e2, 2.2);
     this.viewSun.position.set(0.6, 1.0, 0.4);
     view.add(this.viewHemi, this.viewSun);
 
@@ -88,7 +87,7 @@ export class LiteRenderSystem {
     scene.environment = this.envMap;
     view.environment = this.envMap;
     scene.environmentIntensity = 0.6;
-    view.environmentIntensity = 2.0;
+    view.environmentIntensity = 0.9;
 
     // ---- public surface other systems read -------------------------------
     this.sunDir = SUN_DIR.clone();
@@ -160,7 +159,7 @@ export class LiteRenderSystem {
     this._cssW = w;
     this._cssH = h;
     const dpr = Math.min(globalThis.devicePixelRatio || 1, this.q.maxPixelRatio ?? 2);
-    const pr = dpr * this._scale;
+    const pr = pixelRatioFor(w, h, dpr, this._scale, this.q.pixelBudget ?? Infinity);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
     this.screenSize.width = this.displaySize.width = Math.max(1, Math.floor(w * pr));
@@ -177,6 +176,11 @@ export class LiteRenderSystem {
       if (this.dynres.sample(dt) && this._cssW) {
         this._scale = this.dynres.scale;
         this.resize(this._cssW, this._cssH);
+      }
+      // Last resort when even the lowest resolution can't hold 60: drop shadows.
+      if (this.dynres.starved && this.sun.castShadow) {
+        this.sun.castShadow = false;
+        console.info('[render-lite] starved at minimum scale: shadows off');
       }
     }
     r.info.reset();

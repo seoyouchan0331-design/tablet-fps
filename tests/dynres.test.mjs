@@ -70,3 +70,23 @@ test('starts at `start` and can climb above it up to max when there is headroom'
   feed(d, 16.7, 30); // vsync-locked, never slow: keeps probing up
   assert.ok(d.scale > 0.85, `got ${d.scale}`);
 });
+
+import { pixelRatioFor } from '../src/core/dynres.js';
+
+test('pixel budget caps the drawing-buffer size on Retina screens', () => {
+  // iPad Pro 11 landscape: 1194 x 834 CSS px at DPR 2 -> 3.98 M px uncapped
+  const pr = pixelRatioFor(1194, 834, 2, 1, 2.3e6);
+  assert.ok(Math.abs(1194 * 834 * pr * pr - 2.3e6) < 2e4, String(pr));
+  // under the budget nothing changes
+  assert.equal(pixelRatioFor(800, 600, 1, 1, 2.3e6), 1);
+  // dynres scale still applies below the cap
+  assert.equal(pixelRatioFor(800, 600, 2, 0.5, 2.3e6), 1);
+});
+
+test('starved: still slow at the minimum scale', () => {
+  const d = new DynRes({ target: 1 / 60, min: 0.45, max: 0.7 });
+  assert.equal(d.starved, false);
+  feed(d, 60, 20); // way too slow for long enough to bottom out
+  assert.equal(d.scale, 0.45);
+  assert.equal(d.starved, true);
+});

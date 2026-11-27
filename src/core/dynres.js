@@ -28,6 +28,8 @@ export class DynRes {
     this.max = max;
     this.scale = Math.min(max, Math.max(min, start));
     this.warmup = warmup;
+    /** True once a window was still too slow at the minimum scale. */
+    this.starved = false;
     this._acc = 0;
     this._n = 0;
     this._cooldown = false;
@@ -55,6 +57,7 @@ export class DynRes {
     }
     const t = this.target;
     if (avg > t * 1.2) {
+      if (this.scale <= this.min + 1e-9) this.starved = true;
       if (this._clock - this._probeAt <= PROBE_BLAME) this._banUntil = this._clock + PROBE_BAN;
       this._probeAt = -Infinity;
       this._stable = 0;
@@ -81,4 +84,15 @@ export class DynRes {
     this._cooldown = true;
     return true;
   }
+}
+
+/**
+ * Device pixel ratio to render at: dpr x scale, but never more than `budget`
+ * pixels in the drawing buffer (Retina tablets would otherwise shade ~4 M px).
+ */
+export function pixelRatioFor(cssW, cssH, dpr, scale, budget = Infinity) {
+  const pr = dpr * scale;
+  const area = cssW * cssH;
+  if (area * pr * pr <= budget) return pr;
+  return Math.sqrt(budget / area);
 }

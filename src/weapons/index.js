@@ -7,6 +7,7 @@ import { WEAPON_DEFS, buildRecoilPattern, SPREAD_MODS } from './defs.js';
 import { buildRifle } from './models/rifle.js';
 import { buildSmg } from './models/smg.js';
 import { buildPistol } from './models/pistol.js';
+import { lowpoly } from './models/lowpoly.js';
 import { clamp, clamp01, lerp, damp, DEG } from './mathx.js';
 import { Loadout } from './loadout.js';
 import { HAND_DETAIL } from './hands.js';
@@ -147,7 +148,7 @@ export class WeaponSystem {
     // viewmodel is drawn from its own scene, so ENV_OCCLUSION — how much of the
     // sky a shouldered weapon actually sees, see materials.js — has to be
     // expressed there or it is silently a no-op.
-    ctx.viewScene.environmentIntensity = ENV_OCCLUSION;
+    if (!ctx.config.q?.lite) ctx.viewScene.environmentIntensity = ENV_OCCLUSION;
     this.viewmodel.onClipEvent = (name, clip) => this._onClipEvent(name, clip);
 
     const t0 = performance.now();
@@ -156,7 +157,8 @@ export class WeaponSystem {
     for (const id of ['rifle', 'smg', 'pistol']) {
       const def = { ...WEAPON_DEFS[id] };
       def.cycleTime = 60 / def.rpm;
-      const model = builders[id]();
+      // Tablet build: low-poly guns with the same rig contract (see lowpoly.js).
+      const model = ctx.config.q?.lite ? lowpoly(id) : builders[id]();
       const entry = this.viewmodel.addWeapon(model, def);
       tris += entry.tris;
       this.states.set(id, {

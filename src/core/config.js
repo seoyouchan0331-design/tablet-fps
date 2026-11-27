@@ -27,6 +27,8 @@ export const QUALITY_PRESETS = {
     renderScale: 0.75,
     /** Dynamic resolution starts at renderScale and may climb to this. */
     dynresMax: 1,
+    /** Never shade more than this many pixels (iPad Retina is ~4 M at DPR 2). */
+    pixelBudget: 2.3e6,
     maxPixelRatio: 2,
     shadowMapSize: 1024,
     cascades: 1,
