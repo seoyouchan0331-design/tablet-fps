@@ -186,7 +186,9 @@ export class PauseMenu {
     setStyle(this.root, 'display', '');
     document.exitPointerLock?.();
     const t = this.ctx.time;
-    if (t) {
+    // In a live duel the other player keeps playing: never freeze game time.
+    const inDuel = this.ctx.peek('match')?.phase === 'match';
+    if (t && !inDuel) {
       this._prevScale = t.scale;
       t.scale = 0;
     }
@@ -198,7 +200,8 @@ export class PauseMenu {
     if (!this.open) return;
     this.open = false;
     const t = this.ctx.time;
-    if (t) t.scale = this._prevScale ?? 1;
+    if (t && this._prevScale !== undefined) t.scale = this._prevScale;
+    this._prevScale = undefined;
     this.ctx.peek('player')?.setControlEnabled?.(true);
     this.ctx.input?.requestPointerLock?.();
     this.ctx.events.emit('ui:pause', { paused: false });

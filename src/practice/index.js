@@ -7,7 +7,8 @@
  * event object (the pattern ARCHITECTURE.md prescribes: the target applies
  * damage). The listener is prepended so the HUD and audio see `killed`.
  */
-import { Avatar } from '../opponent/avatar.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { Avatar, loadCharacterModel } from '../opponent/avatar.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 
 const RESPAWN_S = 2;
@@ -24,7 +25,8 @@ export class PracticeSystem {
     this.world = ctx.get('world');
     this.rng = ctx.rng.fork();
     this.dummy = { name: 'DUMMY', isAvatar: true, hp: MAX_HP };
-    this.avatar = new Avatar(ctx.scene, this.physics, { owner: this.dummy, name: 'practice-dummy', lite: !!ctx.config.q?.lite });
+    const model = await loadCharacterModel();
+    this.avatar = new Avatar(ctx.scene, this.physics, { owner: this.dummy, name: 'practice-dummy', lite: !!ctx.config.q?.lite, model, clone: cloneSkinned });
     this.dummy.avatar = this.avatar;
     this._deadUntil = 0;
     this._phase = 0;
@@ -53,12 +55,14 @@ export class PracticeSystem {
   /** Practice dummy on/off (off during a duel). */
   setActive(on) {
     this.active = on;
-    this.avatar.setAlive(on);
+    if (on) this.avatar.setAlive(true);
+    else this.avatar.hide();
     if (on) this.dummy.hp = MAX_HP;
   }
 
   update(dt, ctx) {
     if (!this.active) return;
+    this.avatar.tick(dt);
     const now = ctx.time.elapsed;
     if (!this.avatar.alive) {
       if (now >= this._deadUntil) {

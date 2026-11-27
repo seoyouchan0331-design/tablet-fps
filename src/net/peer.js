@@ -47,15 +47,16 @@ class PeerTransport {
   }
 
   /** Register as host of `code` and resolve once a guest's channel is open. */
-  static async host(code, { timeout = 10 * 60 * 1000 } = {}) {
+  static async host(code, { timeout = 10 * 60 * 1000, signal } = {}) {
     const peer = await PeerTransport._peer(PREFIX + code);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => fail(new Error('timeout')), timeout);
       const fail = (err) => {
         clearTimeout(timer);
-        peer.destroy();
+        peer.destroy(); // releases the room id on the broker
         reject(err);
       };
+      signal?.addEventListener('abort', () => fail(new Error('cancelled')), { once: true });
       peer.on('error', (e) => fail(new Error(e?.type === 'unavailable-id' ? 'room-taken' : 'network')));
       peer.on('connection', (conn) => {
         conn.on('open', () => {
@@ -67,7 +68,7 @@ class PeerTransport {
   }
 
   /** Connect to the host of `code`. */
-  static async join(code, { timeout = 15000 } = {}) {
+  static async join(code, { timeout = 15000, signal } = {}) {
     const peer = await PeerTransport._peer(undefined);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => fail(new Error('timeout')), timeout);
@@ -76,6 +77,7 @@ class PeerTransport {
         peer.destroy();
         reject(err);
       };
+      signal?.addEventListener('abort', () => fail(new Error('cancelled')), { once: true });
       peer.on('error', (e) => fail(new Error(e?.type === 'peer-unavailable' ? 'room-not-found' : 'network')));
       peer.on('open', () => {
         const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });

@@ -7,7 +7,8 @@
  * `damage:dealt` with that target, which MatchSystem turns into a hit claim for
  * the host (the opponent's HP is never changed locally).
  */
-import { Avatar } from './avatar.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { Avatar, loadCharacterModel } from './avatar.js';
 import { SnapshotBuffer } from '../match/interp.js';
 
 const DELAY = 0.1; // seconds behind the newest snapshot
@@ -19,16 +20,19 @@ export class OpponentSystem {
   async init(ctx) {
     this.ctx = ctx;
     this.target = { name: 'OPPONENT', isOpponent: true };
+    const model = await loadCharacterModel();
     this.avatar = new Avatar(ctx.scene, ctx.get('physics'), {
       owner: this.target,
       name: 'opponent',
       lite: !!ctx.config.q?.lite,
+      model,
+      clone: cloneSkinned,
     });
     this.target.avatar = this.avatar;
     this.buffer = new SnapshotBuffer();
-    this._s = { x: 0, y: 0, z: 0, yaw: 0, alive: false };
+    this._s = { x: 0, y: 0, z: 0, yaw: 0, alive: false, air: false };
     this.visible = false;
-    this.avatar.setAlive(false);
+    this.avatar.hide();
   }
 
   /** New authoritative state for the remote player (t in seconds, sender clock rebased by MatchSystem). */
@@ -40,7 +44,7 @@ export class OpponentSystem {
   setVisible(v) {
     this.visible = v;
     if (!v) {
-      this.avatar.setAlive(false);
+      this.avatar.hide();
       this.buffer = new SnapshotBuffer();
     }
   }
@@ -48,9 +52,12 @@ export class OpponentSystem {
   update(dt, ctx) {
     if (!this.visible) return;
     const s = this._s;
-    if (!this.buffer.sample(ctx.time.raw - DELAY, s)) return;
-    if (this.avatar.alive !== !!s.alive) this.avatar.setAlive(!!s.alive);
-    if (s.alive) this.avatar.setPose(s.x, s.y, s.z, s.yaw);
+    if (this.buffer.sample(ctx.time.raw - DELAY, s)) {
+      if (this.avatar.alive !== !!s.alive) this.avatar.setAlive(!!s.alive);
+      if (s.alive) this.avatar.setPose(s.x, s.y, s.z, s.yaw);
+      this.avatar.setAir(s.air);
+    }
+    this.avatar.tick(ctx.time.dt || dt);
   }
 
   dispose() {

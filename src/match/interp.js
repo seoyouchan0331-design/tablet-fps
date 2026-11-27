@@ -54,3 +54,27 @@ export class SnapshotBuffer {
     return true;
   }
 }
+
+/**
+ * Maps the sender's timestamps onto the local clock. The offset is the
+ * smallest (receive - send) seen so far, i.e. the fastest delivery: packets
+ * that arrive late or bunched together still land at their true, evenly spaced
+ * moments, and a mapped time is never later than when the packet arrived.
+ * Create a new one per match (clocks are per session).
+ */
+export class ClockSync {
+  constructor() {
+    this.offset = Infinity;
+    this._last = -Infinity;
+  }
+
+  map(sendT, recvT) {
+    const d = recvT - sendT;
+    if (d < this.offset) this.offset = d;
+    // When a faster packet lowers the offset, earlier mappings were slightly
+    // late; never step backwards (the buffer would drop the snapshot).
+    const t = Math.max(sendT + this.offset, this._last + 1e-4);
+    this._last = t;
+    return t;
+  }
+}

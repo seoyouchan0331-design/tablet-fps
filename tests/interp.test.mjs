@@ -46,3 +46,28 @@ test('non-boolean fields come from the nearer snapshot', () => {
   b.sample(1.9, o);
   assert.equal(o.alive, false);
 });
+
+import { ClockSync } from '../src/match/interp.js';
+
+test('ClockSync maps sender time onto the local clock even when packets arrive in bursts', () => {
+  const c = new ClockSync();
+  // sender sends every 1/30 s; network delivers them three at a time every 0.1 s
+  const local = [];
+  for (let i = 0; i < 30; i++) {
+    const sendT = 100 + i / 30;
+    const recvT = 5 + Math.ceil((i + 1) / 3) * 0.1 + 0.02; // burst arrival
+    local.push(c.map(sendT, recvT));
+  }
+  // mapped times stay evenly spaced (1/30 s) once the offset has settled
+  for (let i = 10; i < 30; i++) assert.ok(Math.abs(local[i] - local[i - 1] - 1 / 30) < 1e-6, `gap ${i}`);
+  // and never run ahead of when the packet actually arrived
+  // (the monotonic nudge may add up to a fraction of a millisecond)
+  for (let i = 0; i < 30; i++) assert.ok(local[i] <= 5 + Math.ceil((i + 1) / 3) * 0.1 + 0.02 + 1e-3);
+});
+
+test('bursty arrivals through ClockSync keep every snapshot (none dropped as duplicates)', () => {
+  const c = new ClockSync();
+  const b = new SnapshotBuffer();
+  for (let i = 0; i < 9; i++) b.push(c.map(i / 30, 1 + Math.floor(i / 3) * 0.1), S(i));
+  assert.equal(b.length, 9);
+});

@@ -22,6 +22,7 @@ import { makeRoomCode, isRoomCode, normaliseRoomCode } from '../net/roomcode.js'
 import { BroadcastTransport } from '../net/transport.js';
 import { RoundsMode } from './rounds.js';
 import { validateHit } from './validate.js';
+import { ClockSync } from './interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Lobby } from '../ui/lobby.js';
 
@@ -144,7 +145,9 @@ export class MatchSystem {
       return t;
     }
     const { PeerTransport } = await import('../net/peer.js');
-    return role === 'host' ? PeerTransport.host(code) : PeerTransport.join(code);
+    this._abort = new AbortController();
+    const opts = { signal: this._abort.signal };
+    return role === 'host' ? PeerTransport.host(code, opts) : PeerTransport.join(code, opts);
   }
 
   _wire() {
@@ -213,6 +216,8 @@ export class MatchSystem {
   }
 
   leave() {
+    this._abort?.abort(); // a host still waiting releases its room code now
+    this._abort = null;
     const t = this.transport ?? this._pending;
     this.transport = null;
     this._pending = null;
@@ -234,6 +239,7 @@ export class MatchSystem {
     if (player?.health) player.health.regenEnabled = false;
     this.score = { host: 0, guest: 0 };
     this._hitSeqs = { host: new Set(), guest: new Set() };
+    this.clock = new ClockSync(); // maps the opponent's STATE timestamps onto our clock
     const ui = ctx.peek('ui');
     if (ui?.state) {
       ui.state.mode = 'DUEL';
@@ -432,9 +438,14 @@ export class MatchSystem {
       case MSG.HP:
         if (this.role === 'guest') this._applyHp(m);
         break;
-      case MSG.STATE:
-        this.ctx.peek('opponent')?.push(this.ctx.time.raw, { x: m.x, y: m.y, z: m.z, yaw: m.yaw, alive: !!m.alive });
+      case MSG.STATE: {
+        const now = this.ctx.time.raw;
+        // Sender timestamps keep 30 Hz snapshots evenly spaced even when Wi-Fi
+        // delivers them in bursts (receive time would collapse a burst to one).
+        const t = this.clock && Number.isFinite(m.t) ? this.clock.map(m.t, now) : now;
+        this.ctx.peek('opponent')?.push(t, { x: m.x, y: m.y, z: m.z, yaw: m.yaw, alive: !!m.alive, air: !!m.air });
         break;
+      }
       case MSG.REMATCH:
         this.rematch[this.other] = true;
         if (this.role === 'host' && this.rematch.host) {
@@ -491,6 +502,8 @@ export class MatchSystem {
       const pos = p?.position;
       if (pos) {
         this._send(MSG.STATE, {
+          t: raw,
+          air: p.movement ? !p.movement.grounded : false,
           x: pos.x, y: pos.y, z: pos.z,
           yaw: p.movement?.yaw ?? 0,
           alive: this.alive[this.role] && !p.dead,
