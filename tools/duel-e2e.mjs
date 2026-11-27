@@ -52,6 +52,9 @@ step('both in lobby');
 await click(A, 'rounds-3');
 await waitMatch(B, () => window.__ENGINE__.ctx.peek('match').settings.winTarget === 3, 15000).catch(() => fail('guest did not receive host settings'));
 
+await click(A, 'map-lanes');
+await waitMatch(B, () => window.__ENGINE__.ctx.peek('match').settings.map === 'lanes', 15000).catch(() => fail('guest did not receive the map pick'));
+await B.screenshot({ path: 'shots/lobby-guest.png' });
 await click(A, 'primary-smg');
 await click(A, 'ready');
 await click(B, 'ready');
@@ -60,6 +63,9 @@ await Promise.all([
   waitMatch(B, () => window.__ENGINE__.ctx.peek('match').live === true),
 ]);
 step('round 1 live on both');
+const maps = await Promise.all([A, B].map((p) => p.evaluate(() => window.__ENGINE__.ctx.peek('world').mapId)));
+step(`maps ${maps}`);
+if (maps[0] !== 'lanes' || maps[1] !== 'lanes') fail('picked map not loaded on both sides');
 const roles = await Promise.all([A, B].map((p) => match(p, () => window.__ENGINE__.ctx.peek('match').role)));
 if (roles[0] !== 'host' || roles[1] !== 'guest') fail(`roles ${roles}`);
 
@@ -90,8 +96,21 @@ const sc = await Promise.all([A, B].map((p) => match(p, () => window.__ENGINE__.
 step(`score after kill A=${JSON.stringify(sc[0])} B=${JSON.stringify(sc[1])}`);
 if (sc[0].host !== 1 || sc[1].host !== 1) fail('round win not recorded on both sides');
 
+// ---- between rounds: B switches to the shotgun ------------------------------------
+await waitAct(B, 'round-pick-shotgun', 15000).catch(() => fail('no weapon pick between rounds'));
+const pickShown = await B.evaluate(() => getComputedStyle(document.querySelector('.ow-rpick')).display);
+if (pickShown !== 'flex') fail('round pick hidden during the round break');
+await click(B, 'round-pick-shotgun');
+
 // ---- round 2: sides swapped ---------------------------------------------------
 await waitMatch(A, () => { const m = window.__ENGINE__.ctx.peek('match'); return m.live && m.score.host === 1; });
+await waitMatch(B, () => window.__ENGINE__.ctx.peek('match').live, 15000);
+const bw = await B.evaluate(() => ({ w: window.__ENGINE__.ctx.peek('weapons').activeId, pick: getComputedStyle(document.querySelector('.ow-rpick')).display }));
+step(`B round 2 weapon ${bw.w}, pick strip ${bw.pick}`);
+if (bw.w !== 'shotgun') fail('round pick did not change the weapon');
+if (bw.pick !== 'none') fail('round pick still showing in a live round');
+await waitMatch(A, () => window.__ENGINE__.ctx.peek('opponent').avatar.weapon === 'shotgun', 15000)
+  .catch(() => fail("host does not see the guest's new shotgun"));
 const zA = await A.evaluate(() => window.__ENGINE__.ctx.peek('player').position.z);
 step(`round 2 live, host spawn z=${zA.toFixed(1)}`);
 if (!(zA < -6)) fail('host did not swap to the far spawn in round 2');
@@ -114,6 +133,7 @@ const t0 = Date.now();
 await B.close();
 await waitMatch(A, () => window.__ENGINE__.ctx.peek('match').phase === 'menu', 15000).catch(() => fail('A did not return to menu after B left'));
 step(`A back at menu ${((Date.now() - t0) / 1000).toFixed(1)} s after B left`);
+if ((await A.evaluate(() => window.__ENGINE__.ctx.peek('world').mapId)) !== 'grid') fail('menu did not go back to the GRID map');
 if (Date.now() - t0 > 5000) fail('disconnect took longer than 5 s to notice');
 
 if (errors.length) fail('page errors:\n' + errors.join('\n'));

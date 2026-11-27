@@ -11,7 +11,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { ARENA } from './layout.js';
+import { MAPS } from './layout.js';
 
 const GREY = 0x8a8f96;
 /** Floor is darker than the boxes so the ground plane never washes out to white under the sun. */
@@ -27,69 +27,83 @@ export class ArenaSystem {
 
   async init(ctx) {
     this.ctx = ctx;
-    this.layout = ARENA;
     this.buildings = [];
     this.root = new THREE.Group();
     this.root.name = 'arena';
+    // Materials live for the whole session: swapping maps only swaps geometry,
+    // so no shader program is ever compiled after boot.
+    this.material = new THREE.MeshStandardMaterial({ color: GREY, roughness: 0.9, metalness: 0 });
+    this.floorMaterial = new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 0.95, metalness: 0 });
+    const lite = !!ctx.config.q?.lite;
+    const neon = lite ? new THREE.Color(0.0, 0.78, 1.0) : NEON;
+    this.lineMaterial = new THREE.MeshBasicMaterial({ color: neon, toneMapped: false });
+    this.gridMaterial = new THREE.LineBasicMaterial({ color: GRID, toneMapped: false });
+    ctx.scene.add(this.root);
+    this.mapId = null;
+    this.load('grid');
+    const render = ctx.get('render');
+    if (render) render.probeDisabled = true;
+    render?.patchMaterials?.(this.root);
+    this._spawnIndex = 0;
+  }
+
+  /**
+   * Build map `id` (layout.js MAPS), replacing the current one: meshes,
+   * physics statics, spawns, bounds. Cheap (a few ms); done between matches.
+   * @returns {boolean} whether the map changed
+   */
+  load(id) {
+    const map = MAPS[id] ?? MAPS.grid;
+    const key = MAPS[id] ? id : 'grid';
+    if (key === this.mapId) return false;
+    const ctx = this.ctx;
+    const physics = ctx.get('physics');
+    if (this.mesh) {
+      physics.removeStatic(this.mesh);
+      physics.removeStatic(this.floor);
+      for (const o of [this.mesh, this.floor, this.edges, this.grid]) {
+        this.root.remove(o);
+        o.geometry.dispose();
+      }
+    }
+    const layout = map.layout;
+    this.layout = layout;
+    this.mapId = key;
 
     const boxGeos = [];
     const edgeGeos = [];
     let floorGeo = null;
-    for (const b of ARENA.boxes) {
+    for (const b of layout.boxes) {
       const g = new THREE.BoxGeometry(b.w, b.h, b.d);
       g.translate(b.x, b.y, b.z);
       if (b.floor) floorGeo = g;
       else boxGeos.push(g);
       edgeGeos.push(...edgeBars(b, b.floor ? 0.08 : 0.045));
     }
-    this.material = new THREE.MeshStandardMaterial({ color: GREY, roughness: 0.9, metalness: 0 });
     this.mesh = new THREE.Mesh(mergeGeometries(boxGeos), this.material);
     this.mesh.name = 'arena-boxes';
     this.mesh.userData.surface = 'concrete';
     this.mesh.castShadow = this.mesh.receiveShadow = true; // lite renderer's shadow map
-    this.root.add(this.mesh);
-    this.floorMaterial = new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 0.95, metalness: 0 });
     this.floor = new THREE.Mesh(floorGeo, this.floorMaterial);
     this.floor.name = 'arena-floor';
     this.floor.receiveShadow = true;
-    this.root.add(this.floor);
-
-    // Neon edges are thin emissive bars, not GL lines: lines are 1 px on every
-    // WebGL implementation and vanish on a Retina tablet.
-    // Lite renderer has no HDR headroom: an HDR neon would clip to white there.
-    const lite = !!ctx.config.q?.lite;
-    const neon = lite ? new THREE.Color(0.0, 0.78, 1.0) : NEON;
-    this.lineMaterial = new THREE.MeshBasicMaterial({ color: neon, toneMapped: false });
     this.edges = new THREE.Mesh(mergeGeometries(edgeGeos), this.lineMaterial);
     this.edges.name = 'arena-neon';
     this.edges.userData.owNoShadow = true;
-    this.root.add(this.edges);
-
-    this.gridMaterial = new THREE.LineBasicMaterial({ color: GRID, toneMapped: false });
-    this.grid = new THREE.LineSegments(gridGeometry(ARENA.size, GRID_STEP), this.gridMaterial);
+    this.grid = new THREE.LineSegments(gridGeometry(layout.size, GRID_STEP), this.gridMaterial);
     this.grid.userData.owNoShadow = true;
-    this.root.add(this.grid);
-
+    this.root.add(this.mesh, this.floor, this.edges, this.grid);
     for (const g of boxGeos) g.dispose();
-    boxGeos.length = 0;
     for (const g of edgeGeos) g.dispose();
-
-    ctx.scene.add(this.root);
     this.root.updateMatrixWorld(true);
 
-    const physics = ctx.get('physics');
     physics.addStatic(this.mesh, 'concrete');
     physics.addStatic(this.floor, 'concrete');
     physics.rebuildStatic();
-    const render = ctx.get('render');
-    // A merged arena is only 3 meshes — below render's "real level present"
-    // heuristic — so tell it explicitly not to show its calibration probe.
-    if (render) render.probeDisabled = true;
-    render?.patchMaterials?.(this.root);
 
-    const h = ARENA.size / 2;
+    const h = layout.size / 2;
     this.bounds = new THREE.Box3(new THREE.Vector3(-h, -1, -h), new THREE.Vector3(h, 8, h));
-    this.spawnPoints = ARENA.spawns.map((s, i) => ({
+    this.spawnPoints = layout.spawns.map((s, i) => ({
       position: new THREE.Vector3(s.x, s.y, s.z),
       yaw: s.yaw,
       tag: i === 0 ? 'A' : 'B',
@@ -100,8 +114,18 @@ export class ArenaSystem {
       instances: 0,
       drawCalls: 4,
     };
-    this._spawnIndex = 0;
-    console.info(`[arena] ${ARENA.boxes.length} boxes · ${this.stats.staticTris} tris · 4 draw calls`);
+    // the shadow map is frozen when the renderer is starved: redraw it once
+    const sun = ctx.peek?.('render')?.sun;
+    if (sun) sun.shadow.needsUpdate = true;
+    // the minimap bakes the level once: ask for a fresh bake
+    const mm = ctx.peek?.('ui')?.minimap;
+    if (mm) {
+      mm.bakeDone = false;
+      mm.bakeTries = 0;
+    }
+    ctx.events?.emit?.('world:map', { id: key });
+    console.info(`[arena] map ${key}: ${layout.boxes.length} boxes · ${this.stats.staticTris} tris`);
+    return true;
   }
 
   async prewarmMaterials(ctx = this.ctx) {
@@ -130,7 +154,7 @@ export class ArenaSystem {
   /** Top of the highest box under (x, z), or 0 for the bare floor. */
   groundHeight(x, z) {
     let top = 0;
-    for (const b of ARENA.boxes) {
+    for (const b of this.layout.boxes) {
       if (b.wall || b.floor) continue;
       if (Math.abs(x - b.x) <= b.w / 2 && Math.abs(z - b.z) <= b.d / 2) top = Math.max(top, b.y + b.h / 2);
     }
@@ -138,9 +162,9 @@ export class ArenaSystem {
   }
 
   isOpen(x, z, margin = 0.4) {
-    const h = ARENA.size / 2 - 1 - margin;
+    const h = this.layout.size / 2 - 1 - margin;
     if (Math.abs(x) > h || Math.abs(z) > h) return false;
-    for (const b of ARENA.boxes) {
+    for (const b of this.layout.boxes) {
       if (b.wall || b.floor) continue;
       if (Math.abs(x - b.x) < b.w / 2 + margin && Math.abs(z - b.z) < b.d / 2 + margin) return false;
     }

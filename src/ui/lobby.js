@@ -10,6 +10,7 @@
  *   results  WIN / LOSE · score · REMATCH · LEAVE
  */
 import { Loadout } from '../weapons/loadout.js';
+import { MAPS, MAP_IDS } from '../arena/layout.js';
 import { el } from './util.js';
 
 const CSS = `
@@ -140,6 +141,15 @@ export class Lobby {
       b.classList.toggle('on', s.settings.aimAssist === v);
       b.disabled = s.role !== 'host' || s.myReady;
     }
+    el('div', 'label', this.root, 'MAP');
+    const mr = el('div', 'row', this.root);
+    const cur = s.settings.map ?? 'grid';
+    for (const id of MAP_IDS) {
+      const b = this._btn(mr, MAPS[id].label, `map-${id}`, () => this.on.settings({ ...s.settings, map: id }));
+      b.classList.toggle('on', cur === id);
+      b.disabled = s.role !== 'host' || s.myReady;
+    }
+    el('div', 'sub', this.root, MAPS[cur]?.note ?? '').dataset.act = 'map-note';
     el('div', 'label', this.root, 'FIRST TO');
     const rr = el('div', 'row', this.root);
     for (const n of [3, 5, 7]) {

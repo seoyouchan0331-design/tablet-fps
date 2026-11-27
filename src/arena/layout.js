@@ -50,6 +50,76 @@ export const ARENA = {
   ],
 };
 
+/** Floor + four perimeter walls for a SIZE x SIZE map. */
+const shell = () => [
+  { x: 0, y: -0.25, z: 0, w: SIZE, h: 0.5, d: SIZE, floor: true },
+  { x: 0, y: 2.5, z: H - 0.5, w: SIZE, h: 5, d: 1, wall: true },
+  { x: 0, y: 2.5, z: -(H - 0.5), w: SIZE, h: 5, d: 1, wall: true },
+  { x: H - 0.5, y: 2.5, z: 0, w: 1, h: 5, d: SIZE - 2, wall: true },
+  { x: -(H - 0.5), y: 2.5, z: 0, w: 1, h: 5, d: SIZE - 2, wall: true },
+];
+const SPAWNS = ARENA.spawns;
+
+/**
+ * LANES — sniper's map. Two long 3 m walls split it into three lanes; the
+ * middle one is an open spawn-to-spawn sight line with only crouch cover,
+ * the side lanes are closer and climb onto decks. Gaps at the centre link
+ * the lanes.
+ */
+const LANES_HALF = [
+  // lane walls (each with its own twin across the centre), gap at |z| < 2.5
+  { x: 5, y: 1.5, z: 5.75, w: 0.8, h: 3, d: 6.5 },
+  { x: -5, y: 1.5, z: 5.75, w: 0.8, h: 3, d: 6.5 },
+  // crouch cover in the middle lane, off the centre line
+  { x: 2.2, y: 0.6, z: 4, w: 1.6, h: 1.2, d: 1 },
+  // side lane: deck with a step, and low cover
+  { x: 10.5, y: 1.0, z: -3, w: 4, h: 2, d: 5 },
+  { x: 8.0, y: 0.5, z: -3, w: 1, h: 1, d: 3 },
+  { x: -10, y: 0.8, z: -8, w: 3, h: 1.6, d: 1 },
+  { x: 11, y: 0.6, z: 6, w: 2, h: 1.2, d: 2 },
+];
+
+/**
+ * BLOCKS — shotgun's map. Dense head-high cubes and short walls: no long
+ * sight lines, lots of corners to dash around.
+ */
+const BLOCKS_HALF = [
+  { x: 3, y: 1.25, z: 3, w: 2, h: 2.5, d: 2 },
+  { x: 7, y: 1.25, z: -2, w: 2, h: 2.5, d: 2 },
+  { x: -4, y: 1.25, z: 6, w: 2, h: 2.5, d: 2 },
+  { x: 10, y: 1.25, z: 5, w: 2, h: 2.5, d: 2 },
+  { x: 6, y: 0.6, z: 7, w: 3, h: 1.2, d: 1 },
+  { x: -9, y: 0.6, z: 2, w: 1, h: 1.2, d: 3 },
+  { x: -6, y: 1.5, z: -1, w: 5, h: 3, d: 0.8 },
+  { x: 11, y: 0.9, z: -9, w: 4, h: 1.8, d: 4 },
+  { x: 8.5, y: 0.45, z: -9, w: 1, h: 0.9, d: 3 },
+  // breaks the spawn-to-spawn line
+  { x: 0, y: 1.5, z: 8, w: 3, h: 3, d: 1 },
+];
+
+export const MAPS = {
+  grid: { label: 'GRID', note: 'Mixed heights, all-round', layout: ARENA },
+  lanes: {
+    label: 'LANES',
+    note: 'Long sight lines — snipers',
+    layout: {
+      size: SIZE,
+      boxes: [...shell(), { x: 0, y: 0.4, z: 0, w: 3, h: 0.8, d: 1 }, ...LANES_HALF, ...LANES_HALF.map(mirror)],
+      spawns: SPAWNS,
+    },
+  },
+  blocks: {
+    label: 'BLOCKS',
+    note: 'Tight corners — shotguns',
+    layout: {
+      size: SIZE,
+      boxes: [...shell(), { x: 0, y: 0.6, z: 0, w: 2, h: 1.2, d: 2 }, ...BLOCKS_HALF, ...BLOCKS_HALF.map(mirror)],
+      spawns: SPAWNS,
+    },
+  },
+};
+export const MAP_IDS = Object.keys(MAPS);
+
 const EPS = 1e-6;
 const same = (a, b) => Math.abs(a - b) < EPS;
 

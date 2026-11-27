@@ -57,3 +57,41 @@ test('spawns are not inside a box', () => {
     }
   }
 });
+
+// ---- every map --------------------------------------------------------------
+import { MAPS, MAP_IDS } from '../src/arena/layout.js';
+
+test('three maps, GRID first and identical to ARENA', () => {
+  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks']);
+  assert.equal(MAPS.grid.layout, ARENA);
+});
+
+for (const id of ['grid', 'lanes', 'blocks']) {
+  const L = MAPS[id].layout;
+  test(`${id}: valid (symmetric, bounded, walls, spawns 24 m apart)`, () => {
+    assert.deepEqual(validateLayout(L), []);
+  });
+  test(`${id}: spawn strafe lanes are clear (practice dummy moves +-5 m)`, () => {
+    for (const s of L.spawns) {
+      for (let x = -5; x <= 5; x += 0.5) {
+        for (const b of L.boxes) {
+          if (b.floor || b.wall) continue;
+          const inside = Math.abs(x - b.x) < b.w / 2 + 0.4 && Math.abs(s.z - b.z) < b.d / 2 + 0.4;
+          assert.ok(!inside, `${id}: box at ${b.x},${b.z} blocks the spawn lane at x=${x}`);
+        }
+      }
+    }
+  });
+}
+
+test('lanes: a long open sight line down the middle', () => {
+  const L = MAPS.lanes.layout;
+  // a standing eye line (1.6 m) from spawn to spawn along x = 0.8 is not blocked by anything taller than 1.6
+  const blocked = L.boxes.filter((b) => !b.floor && !b.wall && b.y + b.h / 2 > 1.6 && Math.abs(0.8 - b.x) < b.w / 2);
+  assert.deepEqual(blocked.map((b) => [b.x, b.z]), []);
+});
+
+test('blocks: denser than lanes', () => {
+  const n = (id) => MAPS[id].layout.boxes.filter((b) => !b.floor && !b.wall).length;
+  assert.ok(n('blocks') > n('lanes'));
+});

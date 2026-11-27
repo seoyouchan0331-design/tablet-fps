@@ -25,6 +25,9 @@ import { validateHit, HitLedger } from './validate.js';
 import { ClockSync } from './interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Lobby } from '../ui/lobby.js';
+import { RoundPick } from '../ui/roundpick.js';
+import { Loadout } from '../weapons/loadout.js';
+import { MAPS } from '../arena/layout.js';
 
 const STATE_HZ = 30;
 /** Both sides ping every second; silence this long means the other device is gone. */
@@ -48,7 +51,7 @@ export class MatchSystem {
     this.transport = null;
     this.role = null;
     this.code = null;
-    this.settings = { aimAssist: 'low', winTarget: 5 };
+    this.settings = { aimAssist: 'low', winTarget: 5, map: 'grid' };
     this.ready = { host: false, guest: false };
     this.rematch = { host: false, guest: false };
     this.myPrimary = 'rifle';
@@ -66,6 +69,11 @@ export class MatchSystem {
     this._v2 = new THREE.Vector3();
     this._from = new THREE.Vector3();
 
+    // Between rounds: re-pick the primary (applies at once, see RoundPick).
+    this.roundPick = new RoundPick(document.getElementById('ui') ?? document.body, Loadout.PRIMARIES, (id) => {
+      this.myPrimary = id;
+      this.ctx.peek('weapons')?.setLoadout(id);
+    });
     this.lobby = new Lobby(document.getElementById('ui') ?? document.body, {
       practice: () => this.startPractice(),
       create: () => this.createRoom(),
@@ -186,7 +194,7 @@ export class MatchSystem {
 
   changeSettings(s) {
     if (this.role !== 'host') return;
-    this.settings = { aimAssist: s.aimAssist, winTarget: s.winTarget };
+    this.settings = { aimAssist: s.aimAssist, winTarget: s.winTarget, map: MAPS[s.map] ? s.map : 'grid' };
     this._send(MSG.SETTINGS, this.settings);
     this._renderLobby();
   }
@@ -234,6 +242,7 @@ export class MatchSystem {
     this.lobby.hide();
     ctx.config.aimAssist = this.settings.aimAssist;
     ctx.peek('practice')?.setActive(false);
+    ctx.peek('world')?.load?.(this.settings.map ?? 'grid'); // both sides build the host's pick
     ctx.peek('opponent')?.setVisible(true);
     ctx.peek('weapons')?.setLoadout(this.myPrimary);
     const player = ctx.peek('player');
@@ -279,7 +288,9 @@ export class MatchSystem {
       player?.setControlEnabled?.(false);
       ui?.banner?.show(`Round ${ev.round}`, `${ev.score[this.role]} – ${ev.score[this.other]}`);
       this._roundEndsAt = null;
+      if (ev.round > 1) this.roundPick.show(this.myPrimary); // still open from the round end
     } else if (ev.type === 'live') {
+      this.roundPick.hide();
       this.live = true;
       player?.setControlEnabled?.(true);
       this._roundEndsAt = ctx.time.raw + (ev.time ?? 30);
@@ -289,7 +300,9 @@ export class MatchSystem {
       player?.setControlEnabled?.(false);
       const title = ev.winner === this.role ? 'Round won' : ev.winner ? 'Round lost' : 'Draw';
       ui?.banner?.show(title, `${ev.score[this.role]} – ${ev.score[this.other]}`);
+      this.roundPick.show(this.myPrimary);
     } else if (ev.type === 'matchEnd') {
+      this.roundPick.hide();
       this.live = false;
       this.phase = 'results';
       this._winner = ev.winner;
@@ -308,6 +321,8 @@ export class MatchSystem {
   }
 
   _teardownMatch() {
+    this.roundPick?.hide();
+    this.ctx.peek('world')?.load?.('grid'); // practice lives on GRID
     this.live = false;
     this.mode = null;
     this.ctx.peek('opponent')?.setVisible(false);
@@ -435,7 +450,7 @@ export class MatchSystem {
         break;
       case MSG.SETTINGS:
         if (this.role === 'guest') {
-          this.settings = { aimAssist: m.aimAssist, winTarget: m.winTarget };
+          this.settings = { aimAssist: m.aimAssist, winTarget: m.winTarget, map: MAPS[m.map] ? m.map : 'grid' };
           this._renderLobby();
         }
         break;
@@ -552,5 +567,6 @@ export class MatchSystem {
     this._offFire?.();
     this.transport?.close();
     this.lobby.dispose();
+    this.roundPick.dispose();
   }
 }
