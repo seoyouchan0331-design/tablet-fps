@@ -82,3 +82,18 @@ for (const id of ['rifle', 'smg', 'pistol']) {
     assert.ok(part.build().has('lp_reticle'));
   });
 }
+
+for (const id of ['shotgun', 'sniper']) {
+  test(`${id}: rides the rifle rig with its own muzzle`, () => {
+    const ref = buildRifle();
+    const lp = lowpoly(id);
+    assert.equal(lp.id, id);
+    assert.deepEqual(Object.keys(lp.moving).sort(), Object.keys(ref.moving).sort());
+    assert.deepEqual(lp.nodes.sight, ref.nodes.sight);
+    assert.deepEqual(lp.nodes.gripR, ref.nodes.gripR);
+    const s = stats(lp.body.build());
+    assert.ok(s.tris > 300 && s.tris < 3500, `${s.tris} tris`);
+    for (const k of s.keys) assert.ok(k.startsWith('lp_'), k);
+    assert.ok(Math.abs(s.b.min.z - lp.nodes.muzzle[2]) < 0.012, `muzzle node ${lp.nodes.muzzle[2]} vs body ${s.b.min.z}`);
+  });
+}

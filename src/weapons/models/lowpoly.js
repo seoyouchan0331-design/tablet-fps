@@ -23,7 +23,11 @@ import { buildRifle } from './rifle.js';
 import { buildSmg } from './smg.js';
 import { buildPistol } from './pistol.js';
 
-const DETAILED = { rifle: buildRifle, smg: buildSmg, pistol: buildPistol };
+// Shotgun and sniper have no detailed model: they ride the rifle's rig (grip,
+// mag seat, hand targets, bolt travel) with their own muzzle position.
+const DETAILED = { rifle: buildRifle, smg: buildSmg, pistol: buildPistol, shotgun: buildRifle, sniper: buildRifle };
+/** Muzzle crown z for the guns that override the rifle's. */
+export const MUZZLE_Z = { shotgun: -0.56, sniper: -0.74 };
 
 /** Extrude a [z, y] side profile to `width` along X, centred on x = cx. */
 function side(points, width, cx = 0, bevel = 0.0012) {
@@ -243,12 +247,88 @@ function pistolSlide(b) {
   return a;
 }
 
-const BODIES = { rifle: rifleBody, smg: smgBody, pistol: pistolBody };
-export const ACCENTS = { rifle: 0xff7a1f, smg: 0x19c3d6, pistol: 0xffc21f };
+
+/** Rifle-rig lower half shared by the shotgun and sniper: lower receiver, guard, grip. */
+function rigLower(a) {
+  a.add(
+    side(
+      [[0.05, 0.058], [0.05, 0.036], [0.032, 0.03], [-0.018, 0.03], [-0.024, 0.008], [-0.124, 0.008], [-0.128, 0.04], [-0.133, 0.058]],
+      0.03
+    ),
+    'lp_body'
+  );
+  a.add(box(0.012, 0.004, 0.062, 0.001), 'lp_body', { y: 0.012, z: 0.012 });
+  a.add(box(0.012, 0.02, 0.004, 0.001), 'lp_body', { y: 0.02, z: -0.017 });
+  a.add(side([[0.052, 0.03], [0.088, 0.034], [0.12, -0.064], [0.113, -0.074], [0.082, -0.074], [0.05, 0.004]], 0.026), 'lp_grip');
+}
+
+function shotgunBody() {
+  const a = new Assembly('lp-shotgun-body');
+  const bore = 0.075;
+  rigLower(a);
+  // slab-sided receiver, taller than the rifle's
+  a.add(side([[0.055, 0.056], [0.055, 0.1], [0.044, 0.108], [-0.16, 0.108], [-0.17, 0.098], [-0.17, 0.056]], 0.036), 'lp_body');
+  a.add(box(0.002, 0.018, 0.05, 0), 'lp_dark', { x: 0.0185, y: 0.08, z: -0.06 }); // ejection port
+  // heavy barrel over a magazine tube, joined by a barrel band
+  a.add(rodZ(0.0118, 0.0118, 0.4, 12), 'lp_metal', { y: 0.088, z: -0.36 });
+  a.add(rodZ(0.0125, 0.0125, 0.3, 10), 'lp_dark', { y: 0.058, z: -0.31 });
+  a.add(box(0.03, 0.05, 0.016, 0.003), 'lp_body', { y: 0.073, z: -0.47 });
+  // ribbed pump forend (accent) where the support hand rides
+  a.add(octZ(0.0215, 0.17), 'lp_accent', { y: bore, z: -0.27 });
+  for (let i = 0; i < 6; i++) a.add(box(0.046, 0.004, 0.006, 0), 'lp_dark', { y: bore - 0.021, z: -0.2 - i * 0.026 });
+  // muzzle: a short choke with a bead
+  a.add(rodZ(0.0135, 0.0135, 0.028, 12), 'lp_dark', { y: 0.088, z: -0.546 });
+  a.add(new THREE.SphereGeometry(0.003, 8, 6), 'lp_accent', { y: 0.103, z: -0.54 });
+  // vent rib along the barrel top
+  a.add(box(0.008, 0.004, 0.36, 0.001), 'lp_metal', { y: 0.1015, z: -0.36 });
+  // solid stock with a thick recoil pad
+  a.add(side([[0.05, 0.1], [0.236, 0.106], [0.236, 0.004], [0.2, 0.004], [0.13, 0.042], [0.05, 0.04]], 0.038), 'lp_accent');
+  a.add(box(0.04, 0.104, 0.018, 0.004), 'lp_grip', { y: 0.055, z: 0.243 });
+  // compact red dot on a riser (sight centre y .142)
+  a.add(box(0.018, 0.026, 0.032, 0.002), 'lp_body', { y: 0.12, z: 0.0 });
+  a.add(tubeZ(0.0145, 0.016, 0.04), 'lp_body', { y: 0.142, z: -0.004 });
+  a.add(tubeZ(0.0145, 0.0175, 0.006), 'lp_accent', { y: 0.142, z: -0.024 });
+  reticle(a, 0, 0.142, -0.024);
+  return a;
+}
+
+function sniperBody() {
+  const a = new Assembly('lp-sniper-body');
+  const bore = 0.075;
+  rigLower(a);
+  // round bolt-action receiver
+  a.add(rodZ(0.019, 0.019, 0.2, 12), 'lp_metal', { y: bore + 0.004, z: -0.05 });
+  // bolt handle with a ball knob on the right
+  a.add(box(0.034, 0.006, 0.008, 0.001), 'lp_metal', { x: 0.03, y: bore - 0.004, z: 0.02, rz: -0.5 });
+  a.add(new THREE.SphereGeometry(0.008, 10, 8), 'lp_dark', { x: 0.046, y: bore - 0.014, z: 0.02 });
+  // chassis: long forend in the accent colour, slotted
+  a.add(side([[-0.15, 0.09], [-0.48, 0.09], [-0.5, 0.075], [-0.48, 0.05], [-0.15, 0.048]], 0.044), 'lp_accent');
+  for (const sx of [-1, 1]) for (let i = 0; i < 4; i++) a.add(box(0.002, 0.012, 0.05, 0), 'lp_dark', { x: sx * 0.0222, y: 0.07, z: -0.2 - i * 0.075 });
+  // fluted heavy barrel and a brake
+  a.add(rodZ(0.0105, 0.0085, 0.25, 10), 'lp_metal', { y: bore, z: -0.6 });
+  a.add(box(0.022, 0.03, 0.05, 0.003), 'lp_dark', { y: bore, z: -0.71 });
+  for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) a.add(box(0.002, 0.016, 0.008, 0), 'lp_metal', { x: sx * 0.0115, y: bore, z: -0.695 - i * 0.014 });
+  // adjustable stock: thumbhole profile with a cheek riser
+  a.add(side([[0.05, 0.1], [0.236, 0.104], [0.236, 0.01], [0.215, 0.004], [0.16, 0.03], [0.13, 0.06], [0.1, 0.06], [0.05, 0.04]], 0.036), 'lp_accent');
+  a.add(box(0.028, 0.012, 0.09, 0.003), 'lp_body', { y: 0.11, z: 0.17 });
+  a.add(box(0.04, 0.1, 0.016, 0.004), 'lp_grip', { y: 0.055, z: 0.243 });
+  // scope: rings, tube, turrets, objective and ocular bells (hollow, sight y .142)
+  for (const z of [-0.075, 0.01]) a.add(box(0.012, 0.03, 0.016, 0.002), 'lp_body', { y: 0.116, z });
+  a.add(tubeZ(0.0148, 0.0165, 0.16), 'lp_body', { y: 0.142, z: -0.03 });
+  a.add(tubeZ(0.022, 0.025, 0.06), 'lp_body', { y: 0.142, z: -0.135 });
+  a.add(tubeZ(0.016, 0.0195, 0.04), 'lp_body', { y: 0.142, z: 0.065 });
+  a.add(tubeZ(0.022, 0.0258, 0.008), 'lp_accent', { y: 0.142, z: -0.168 });
+  a.add(rodZ(0.008, 0.008, 0.016, 10).rotateX(Math.PI / 2), 'lp_metal', { y: 0.166, z: -0.03 });
+  a.add(rodZ(0.008, 0.008, 0.016, 10).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), 'lp_metal', { x: 0.024, y: 0.142, z: -0.03 });
+  return a;
+}
+
+const BODIES = { rifle: rifleBody, smg: smgBody, pistol: pistolBody, shotgun: shotgunBody, sniper: sniperBody };
+export const ACCENTS = { rifle: 0xff7a1f, smg: 0x19c3d6, pistol: 0xffc21f, shotgun: 0xe0413a, sniper: 0x6fd36a };
 
 /**
  * Low-poly model with the detailed model's rig contract.
- * @param {'rifle'|'smg'|'pistol'} id
+ * @param {'rifle'|'smg'|'pistol'|'shotgun'|'sniper'} id
  */
 export function lowpoly(id) {
   const ref = DETAILED[id]();
@@ -269,5 +349,8 @@ export function lowpoly(id) {
       asm.buckets.set(`lp_accent_${id}`, acc);
     }
   }
-  return { ...ref, body, moving, accent: ACCENTS[id] };
+  let nodes = ref.nodes;
+  if (MUZZLE_Z[id] !== undefined) nodes = { ...nodes, muzzle: [nodes.muzzle[0], nodes.muzzle[1], MUZZLE_Z[id]] };
+  const extra = id === 'shotgun' || id === 'sniper' ? { id, label: id.toUpperCase(), fxClass: id } : {};
+  return { ...ref, ...extra, nodes, body, moving, accent: ACCENTS[id] };
 }

@@ -272,6 +272,85 @@ export const WEAPON_DEFS = {
   },
 };
 
+/*
+ * Duel additions. Both are built on the rifle's rig (same receiver, grip, mag
+ * seat and hand targets, see models/lowpoly.js), so they inherit its poses and
+ * override only what makes them play differently.
+ */
+const RIFLE = WEAPON_DEFS.rifle;
+
+/** Semi-auto magazine shotgun: 8 pellets, a kill up close, a scratch at range. */
+WEAPON_DEFS.shotgun = {
+  ...RIFLE,
+  id: 'shotgun',
+  label: 'VX-12',
+  class: 'shotgun',
+  caliber: '12ga',
+  rpm: 85,
+  modes: ['semi'],
+  burstCount: 1,
+  burstRpm: 85,
+  magSize: 6,
+  reserve: 36,
+  pellets: 8,
+  pelletSpread: 3.8, // cone half-angle (deg) from the hip
+  pelletSpreadAds: 2.7,
+  muzzleVelocity: 420,
+  damage: 14, // per pellet
+  penetration: 0.3,
+  dropoff: 0.18,
+  maxRange: 42,
+  dragK: 0.9,
+  tracerEvery: 1,
+  spreadHip: 0.8,
+  spreadAds: 0.2,
+  spreadPerShot: 0.5,
+  spreadMax: 1.6,
+  spreadDecay: 3,
+  recoil: { ...RIFLE.recoil, pitch: 0.034, yaw: 0.006, kickBack: 0.045, kickUp: 0.016, roll: 0.06, punch: 0.9,
+    patternLength: 6, patternSeed: 0x5a17e2, climbShape: [1], drift: 0.6 },
+  adsTime: 0.2,
+  adsFov: 0.84,
+  reloadTac: 2.3,
+  reloadEmpty: 2.8,
+  drawTime: 0.6,
+};
+
+/** Bolt-action sniper: headshot kills, body shot leaves 10 hp; zooms 3.3x. */
+WEAPON_DEFS.sniper = {
+  ...RIFLE,
+  id: 'sniper',
+  label: 'LR-7',
+  class: 'sniper',
+  caliber: '.308',
+  rpm: 48,
+  modes: ['semi'],
+  burstCount: 1,
+  burstRpm: 48,
+  magSize: 5,
+  reserve: 25,
+  muzzleVelocity: 950,
+  damage: 90,
+  penetration: 1.4,
+  dropoff: 0.95,
+  maxRange: 420,
+  dragK: 0.1,
+  tracerEvery: 1,
+  spreadHip: 5.5, // no-scoping is a gamble
+  spreadAds: 0,
+  spreadPerShot: 3,
+  spreadMax: 7,
+  spreadDecay: 6,
+  recoil: { ...RIFLE.recoil, pitch: 0.04, yaw: 0.005, kickBack: 0.05, kickUp: 0.014, roll: 0.05, punch: 0.8,
+    patternLength: 5, patternSeed: 0x7e1f03, climbShape: [1], drift: 0.4 },
+  adsTime: 0.3,
+  adsFov: 0.8,
+  scopeFov: 0.3, // world camera FOV multiplier when fully scoped
+  reloadTac: 2.6,
+  reloadEmpty: 3.1,
+  drawTime: 0.7,
+};
+
 /**
  * Generate the deterministic recoil pattern for a weapon.
  *

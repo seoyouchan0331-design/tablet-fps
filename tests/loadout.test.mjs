@@ -22,6 +22,11 @@ test('other() swaps between the two chosen weapons only', () => {
   assert.equal(l.other('rifle'), 'smg', 'a weapon outside the loadout swaps to the primary');
 });
 
-test('PRIMARIES lists the two choices', () => {
-  assert.deepEqual(Loadout.PRIMARIES, ['rifle', 'smg']);
+test('PRIMARIES lists the four choices', () => {
+  assert.deepEqual(Loadout.PRIMARIES, ['rifle', 'smg', 'shotgun', 'sniper']);
+});
+
+test('shotgun and sniper primaries', () => {
+  assert.deepEqual(new Loadout('shotgun').ids(), ['shotgun', 'pistol']);
+  assert.deepEqual(new Loadout('sniper').ids(), ['sniper', 'pistol']);
 });

@@ -16,7 +16,7 @@ import { PlayerSystem } from './player/index.js';
 import { WeaponSystem } from './weapons/index.js';
 import { FxSystem } from './fx/index.js';
 import { UiSystem } from './ui/index.js';
-import { AudioSystem } from './audio/index.js';
+import { DuelAudioSystem } from './audio/duel.js';
 
 import { installShotApi } from './dev/shots.js';
 import { prewarm } from './core/prewarm.js';
@@ -65,7 +65,7 @@ engine
   .add(WeaponSystem)
   .add(FxSystem)
   .add(UiSystem)
-  .add(AudioSystem)
+  .add(DuelAudioSystem)
   .add(MatchSystem);
 if (!lite) engine.add(SkySystem);
 

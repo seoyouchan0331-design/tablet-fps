@@ -9,6 +9,7 @@
  *   lobby    room code · host settings (aim assist, rounds) · loadout · READY
  *   results  WIN / LOSE · score · REMATCH · LEAVE
  */
+import { Loadout } from '../weapons/loadout.js';
 import { el } from './util.js';
 
 const CSS = `
@@ -148,7 +149,7 @@ export class Lobby {
     }
     el('div', 'label', this.root, 'YOUR PRIMARY (+ PISTOL)');
     const lo = el('div', 'row', this.root);
-    for (const id of ['rifle', 'smg']) {
+    for (const id of Loadout.PRIMARIES) {
       const b = this._btn(lo, id.toUpperCase(), `primary-${id}`, () => {
         this.primary = id;
         this.showLobby(s);

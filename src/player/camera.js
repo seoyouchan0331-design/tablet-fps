@@ -302,7 +302,9 @@ export class CameraRig {
     else if (m.sprinting) moveTarget = F.sprint;
     else if (!m.grounded && m.velocity.y < -6) moveTarget = F.air;
     this.fovMove = approach(this.fovMove, moveTarget, F.moveTau, dt);
-    this.fovAds = approach(this.fovAds, lerp(1, cfg.adsFovScale, ads), F.adsTau, dt);
+    // A scoped weapon (sniper) brings its own, much tighter zoom.
+    const scope = this.ctx.peek('weapons')?.current?.scopeFov;
+    this.fovAds = approach(this.fovAds, lerp(1, scope ?? cfg.adsFovScale, ads), F.adsTau, dt);
     this.baseFov = cfg.fov;
     this.fov = this.baseFov * this.fovMove * this.fovAds;
 

@@ -1,6 +1,6 @@
 /** The two weapons a player carries into a match: a primary and the pistol. */
 export class Loadout {
-  static PRIMARIES = ['rifle', 'smg'];
+  static PRIMARIES = ['rifle', 'smg', 'shotgun', 'sniper'];
 
   constructor(primary = 'rifle') {
     if (!Loadout.PRIMARIES.includes(primary)) throw new Error(`invalid primary "${primary}"`);

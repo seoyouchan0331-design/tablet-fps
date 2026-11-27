@@ -277,7 +277,9 @@ export class PlayerSystem {
     }
     const input = this.ctx.input;
     const cfg = this.ctx.config;
-    const sens = lerp(1, cfg.adsSensScale, clamp01(this.adsAmount));
+    // Scoped: slow the look in proportion to the zoom so the reticle doesn't fly.
+    const scope = this.ctx.peek('weapons')?.current?.scopeFov;
+    const sens = lerp(1, scope ? scope * 1.1 : cfg.adsSensScale, clamp01(this.adsAmount));
 
     let dYaw = -input.look.x * sens;
     let dPitch = -input.look.y * sens;

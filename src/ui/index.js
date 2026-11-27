@@ -16,6 +16,7 @@ import { CombatDemo } from './demo.js';
 import { TouchControls } from './touch.js';
 import { LoadoutPicker } from './loadout.js';
 import { ControlsPanel } from './controls.js';
+import { ScopeOverlay } from './scope.js';
 
 const KILL_FLASH_S = 0.12;
 
@@ -105,6 +106,7 @@ export class UiSystem {
     this.killFlash.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0;' +
       'background:radial-gradient(ellipse at center, rgba(61,242,255,0) 45%, rgba(61,242,255,.55) 100%)';
     this._flashT = 0;
+    this.scope = new ScopeOverlay(host); // under the touch buttons (z 5)
     // The boot screen is now the duel main menu (MatchSystem); PRACTICE opens
     // this picker. Kept false here so the HUD never shows it on its own.
     this._loadoutPending = false;
@@ -192,6 +194,7 @@ export class UiSystem {
     const on = (type, fn) => this._unsubs.push(ctx.events.on(type, fn));
 
     on('weapon:fire', (e) => {
+      if (e?.remote) return; // the duel opponent's shot, not ours
       this.crosshair.onFire(e?.recoil ?? 1);
       if (this.state.simulate) return;
       const w = this._weaponState();
@@ -458,6 +461,8 @@ export class UiSystem {
     }
     this.menu.update(rawDt);
     this.touch?.update(rawDt);
+    const wp = ctx.peek('weapons');
+    this.scope.set(!!wp?.current?.scopeFov && wp.adsProgress > 0.85 && !this.menu.open, ctx);
     if (this._flashT > 0) {
       this._flashT = Math.max(0, this._flashT - rawDt);
       setStyle(this.killFlash, 'opacity', (this._flashT / KILL_FLASH_S).toFixed(2));
@@ -645,6 +650,7 @@ export class UiSystem {
     for (const off of this._unsubs) off();
     this._unsubs.length = 0;
     this.crosshair.dispose();
+    this.scope.dispose();
     this.hit.dispose();
     this.arcs.dispose();
     this.health.dispose();

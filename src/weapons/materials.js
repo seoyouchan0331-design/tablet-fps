@@ -879,6 +879,8 @@ const LOWPOLY_PALETTE = {
   lp_accent_rifle: [0xff7a1f, 0.45, 0.05],
   lp_accent_smg: [0x19c3d6, 0.45, 0.05],
   lp_accent_pistol: [0xffc21f, 0.45, 0.05],
+  lp_accent_shotgun: [0xe0413a, 0.45, 0.05],
+  lp_accent_sniper: [0x6fd36a, 0.45, 0.05],
 };
 
 export class WeaponMaterials {

@@ -29,3 +29,27 @@ export function validateHit(claim, ctx) {
   if (!ctx.lineOfSight(claim.from, claim.point)) return { ok: false, reason: 'no-los' };
   return { ok: true };
 }
+
+/**
+ * Which shots already landed. A rifle round hits once; a shotgun shell may land
+ * up to one hit per pellet, all under the same shot sequence number.
+ */
+export class HitLedger {
+  constructor() {
+    this.clear();
+  }
+
+  clear() {
+    this._n = { host: new Map(), guest: new Map() };
+  }
+
+  /** Record a hit for `seq`; false when that shot has no hits left. */
+  take(who, seq, max = 1) {
+    const m = this._n[who];
+    const n = m.get(seq) ?? 0;
+    if (n >= max) return false;
+    m.set(seq, n + 1);
+    if (m.size > 64) m.delete(m.keys().next().value);
+    return true;
+  }
+}

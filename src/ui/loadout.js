@@ -12,7 +12,7 @@ const CSS = `
 .ow-loadout[hidden] { display: none; }
 .ow-loadout h2 { font-size: 30px; letter-spacing: -.02em; }
 .ow-loadout .row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
-.ow-loadout .card { width: min(260px, 40vw); padding: 20px; border-radius: 14px; border: 2px solid rgba(61,242,255,.35);
+.ow-loadout .card { width: min(210px, 21vw); padding: 20px; border-radius: 14px; border: 2px solid rgba(61,242,255,.35);
   background: rgba(20,28,34,.8); text-align: left; }
 .ow-loadout .card.on { border-color: #3df2ff; box-shadow: 0 0 0 3px rgba(61,242,255,.25); }
 .ow-loadout .card b { display: block; font-size: 22px; margin-bottom: 6px; }
@@ -25,6 +25,8 @@ const CSS = `
 const CARDS = [
   ['rifle', 'RIFLE', 'Accurate at range, 4 body shots'],
   ['smg', 'SMG', 'Fast fire, best up close'],
+  ['shotgun', 'SHOTGUN', 'One blast up close, weak at range'],
+  ['sniper', 'SNIPER', 'Scope in · headshot kills'],
 ];
 
 export class LoadoutPicker {

@@ -21,7 +21,7 @@ import { MSG } from '../net/protocol.js';
 import { makeRoomCode, isRoomCode, normaliseRoomCode } from '../net/roomcode.js';
 import { BroadcastTransport } from '../net/transport.js';
 import { RoundsMode } from './rounds.js';
-import { validateHit } from './validate.js';
+import { validateHit, HitLedger } from './validate.js';
 import { ClockSync } from './interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Lobby } from '../ui/lobby.js';
@@ -60,7 +60,7 @@ export class MatchSystem {
     this._seq = 0;
     this._shots = { host: new Map(), guest: new Map() }; // seq -> {t, prev}
     this._lastShotT = { host: -Infinity, guest: -Infinity };
-    this._hitSeqs = { host: new Set(), guest: new Set() };
+    this._hits = new HitLedger();
     this._stateAcc = 0;
     this._v1 = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
@@ -238,7 +238,7 @@ export class MatchSystem {
     const player = ctx.peek('player');
     if (player?.health) player.health.regenEnabled = false;
     this.score = { host: 0, guest: 0 };
-    this._hitSeqs = { host: new Set(), guest: new Set() };
+    this._hits.clear();
     this.clock = new ClockSync(); // maps the opponent's STATE timestamps onto our clock
     const ui = ctx.peek('ui');
     if (ui?.state) {
@@ -318,11 +318,31 @@ export class MatchSystem {
 
   // ------------------------------------------------------------- shooting --
   _onLocalFire(e) {
-    if (this.phase !== 'match' || !this.live) return;
+    if (e?.remote || this.phase !== 'match' || !this.live) return;
     const t = this.ctx.time.raw;
     const seq = ++this._seq;
     this._recordShot(this.role, seq, t);
-    if (this.role === 'guest') this._send(MSG.FIRE, { seq, t, weapon: e?.weapon?.id ?? this._weaponId() });
+    // Both sides announce shots: the host books them for hit checks, and the
+    // other player hears and sees the opponent's gun go off.
+    this._send(MSG.FIRE, { seq, t, weapon: e?.weapon?.id ?? this._weaponId() });
+  }
+
+  /** The opponent fired: muzzle flash and gunshot at their gun. */
+  _remoteFire(m) {
+    const opp = this.ctx.peek('opponent');
+    const at = opp?.avatar?.position;
+    if (!at || !opp.avatar.root?.visible) return;
+    const e = this._remoteFireEvent ?? (this._remoteFireEvent = {
+      remote: true, weapon: 'rifle', origin: new THREE.Vector3(), dir: new THREE.Vector3(), seed: 0, flashScale: 0.8,
+    });
+    e.weapon = typeof m.weapon === 'string' ? m.weapon : 'rifle';
+    e.origin.set(at.x, at.y + 1.35, at.z);
+    const eye = this.ctx.peek('player')?.eyePosition;
+    if (eye) e.dir.copy(eye).sub(e.origin).normalize();
+    else e.dir.set(0, 0, 1);
+    e.origin.addScaledVector(e.dir, 0.55); // out at the muzzle, not inside the body
+    e.seed = (m.seq * 2654435761) >>> 0;
+    this.ctx.events.emit('weapon:fire', e);
   }
 
   _weaponId() {
@@ -361,9 +381,10 @@ export class MatchSystem {
   _hostHit(c) {
     if (!this.mode) return;
     const shot = this._shots[c.shooter].get(c.seq);
-    if (!shot || this._hitSeqs[c.shooter].has(c.seq)) return; // unknown shot or already hit
+    if (!shot) return; // unknown shot
     const weapons = this.ctx.peek('weapons');
     const def = weapons?.states?.get(c.weapon)?.def;
+    const maxHits = def?.pellets ?? 1; // a shotgun shell lands once per pellet
     const physics = this.ctx.peek('physics');
     const res = validateHit({ ...c, t: shot.t }, {
       live: this.live && this.mode.state === 'live',
@@ -373,7 +394,7 @@ export class MatchSystem {
       lineOfSight: (a, b) => physics.lineOfSight(this._v1.fromArray(a), this._v2.fromArray(b)),
     });
     if (!res.ok) return;
-    this._hitSeqs[c.shooter].add(c.seq);
+    if (!this._hits.take(c.shooter, c.seq, maxHits)) return; // shot already used up
     const base = Math.min(Number(c.amount) || 0, def?.damage ?? 40);
     const r = applyDamage(this.hp[c.target], base, c.part);
     this.hp[c.target] = r.hp;
@@ -431,6 +452,7 @@ export class MatchSystem {
         break;
       case MSG.FIRE:
         if (this.role === 'host' && Number.isFinite(m.seq) && Number.isFinite(m.t)) this._recordShot('guest', m.seq, m.t);
+        if (this.live) this._remoteFire(m);
         break;
       case MSG.HIT:
         if (this.role === 'host' && m.shooter === 'guest' && m.target === 'host') this._hostHit(m);

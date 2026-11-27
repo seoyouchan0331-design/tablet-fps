@@ -11,6 +11,9 @@ import { lowpoly } from './models/lowpoly.js';
 import { clamp, clamp01, lerp, damp, DEG } from './mathx.js';
 import { Loadout } from './loadout.js';
 import { HAND_DETAIL } from './hands.js';
+import { pelletOffsets } from './pellets.js';
+
+const WEAPON_IDS = ['rifle', 'smg', 'shotgun', 'sniper', 'pistol'];
 
 /**
  * WEAPONS — weapon meshes, the first-person viewmodel rig, ADS, recoil, sway,
@@ -87,6 +90,7 @@ export class WeaponSystem {
     this._muzzle = new THREE.Vector3();
     this._dir = new THREE.Vector3();
     this._right = new THREE.Vector3();
+    this._aim = new THREE.Vector3();
     this._up = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
     this._camDir = new THREE.Vector3();
@@ -154,11 +158,12 @@ export class WeaponSystem {
     const t0 = performance.now();
     const builders = { rifle: buildRifle, smg: buildSmg, pistol: buildPistol };
     let tris = 0;
-    for (const id of ['rifle', 'smg', 'pistol']) {
+    for (const id of WEAPON_IDS) {
       const def = { ...WEAPON_DEFS[id] };
       def.cycleTime = 60 / def.rpm;
       // Tablet build: low-poly guns with the same rig contract (see lowpoly.js).
-      const model = ctx.config.q?.lite ? lowpoly(id) : builders[id]();
+      // Shotgun and sniper only exist as low-poly models.
+      const model = ctx.config.q?.lite || !builders[id] ? lowpoly(id) : builders[id]();
       const entry = this.viewmodel.addWeapon(model, def);
       tris += entry.tris;
       this.states.set(id, {
@@ -407,10 +412,10 @@ export class WeaponSystem {
         .normalize();
     }
 
-    // ---- projectile ----
+    // ---- projectile(s) ----
     this.viewmodel.muzzleWorld(this._muzzle);
     const seed = this.rng.u32();
-    this.sim.spawn({
+    const round = {
       origin: this._muzzle,
       dir: this._dir,
       speed: def.muzzleVelocity,
@@ -421,7 +426,27 @@ export class WeaponSystem {
       maxRange: def.maxRange,
       weapon: def,
       tracer: this.stats.fired % def.tracerEvery === 0,
-    });
+    };
+    if (def.pellets > 1) {
+      // Shotgun: the aimed direction is the centre of a pellet cone.
+      const cone = Math.tan(lerp(def.pelletSpread, def.pelletSpreadAds, this.adsProgress) * DEG);
+      this._right.set(1, 0, 0).applyQuaternion(cam.quaternion);
+      this._up.set(0, 1, 0).applyQuaternion(cam.quaternion);
+      this._aim.copy(this._dir);
+      const offs = pelletOffsets(def.pellets, this.rng);
+      for (let i = 0; i < offs.length; i++) {
+        this._dir
+          .copy(this._aim)
+          .addScaledVector(this._right, cone * offs[i].x)
+          .addScaledVector(this._up, cone * offs[i].y)
+          .normalize();
+        round.tracer = i % 3 === 0;
+        this.sim.spawn(round);
+      }
+      this._dir.copy(this._aim);
+    } else {
+      this.sim.spawn(round);
+    }
 
     // ---- feedback ----
     this.viewmodel.addRecoil(pitch, yaw, first);
