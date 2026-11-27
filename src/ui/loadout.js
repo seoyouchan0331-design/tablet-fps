@@ -7,8 +7,8 @@ import { el } from './util.js';
 
 const CSS = `
 .ow-loadout { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 22px; padding: 24px max(5vw,16px); background: rgba(6,9,12,.82);
-  font-family: "Inter","Helvetica Neue",Arial,sans-serif; color: #e8f4f8; touch-action: none; user-select: none; -webkit-user-select: none; }
+  justify-content: safe center; gap: 22px; padding: 24px max(5vw,16px); background: rgba(6,9,12,.82); overflow-y: auto;
+  font-family: "Inter","Helvetica Neue",Arial,sans-serif; color: #e8f4f8; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .ow-loadout[hidden] { display: none; }
 .ow-loadout h2 { font-size: 30px; letter-spacing: -.02em; }
 .ow-loadout .row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
@@ -20,13 +20,22 @@ const CSS = `
 .ow-loadout .start { min-width: 200px; min-height: 52px; border-radius: 26px; border: 0; background: #3df2ff; color: #031015;
   font: 700 18px "Inter","Helvetica Neue",Arial,sans-serif; letter-spacing: .06em; }
 .ow-loadout .sub { font-size: 14px; color: #a9bcc4; }
+@media (max-height: 560px) {
+  .ow-loadout { gap: 10px; padding: 10px max(3vw,12px); }
+  .ow-loadout h2 { font-size: 22px; }
+  .ow-loadout .row { gap: 8px; flex-wrap: nowrap; }
+  .ow-loadout .card { padding: 10px 12px; }
+  .ow-loadout .card b { font-size: 16px; margin-bottom: 2px; }
+  .ow-loadout .card span { font-size: 11px; }
+  .ow-loadout .start { min-height: 44px; }
+}
 `;
 
 const CARDS = [
   ['rifle', 'RIFLE', 'Accurate at range, 4 body shots'],
   ['smg', 'SMG', 'Fast fire, best up close'],
   ['shotgun', 'SHOTGUN', 'One blast up close, weak at range'],
-  ['sniper', 'SNIPER', 'Scope in · headshot kills'],
+  ['sniper', 'SNIPER', 'Scope in · one hit kills'],
 ];
 
 export class LoadoutPicker {
