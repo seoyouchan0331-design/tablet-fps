@@ -18,7 +18,7 @@
  * lp_dark (ports, slots, magazines), lp_grip (rubber).
  */
 import * as THREE from 'three';
-import { Assembly, box, extrude, rodZ } from '../geometry.js';
+import { Assembly, box, extrude, rodZ, latheZ } from '../geometry.js';
 import { buildRifle } from './rifle.js';
 import { buildSmg } from './smg.js';
 import { buildPistol } from './pistol.js';
@@ -31,6 +31,18 @@ function side(points, width, cx = 0, bevel = 0.0012) {
   g.rotateY(Math.PI / 2); // shape X -> world -Z, extrusion Z -> world X
   g.translate(cx, 0, 0);
   return g;
+}
+
+/** Hollow tube along Z, centred on z = 0: optic bodies and lens rings must not block ADS. */
+function tubeZ(rIn, rOut, len, seg = 12) {
+  const z0 = -len / 2;
+  const z1 = len / 2;
+  return latheZ([[z0, rIn], [z0, rOut], [z1, rOut], [z1, rIn], [z0, rIn]], seg);
+}
+
+/** Red-dot reticle: a tiny unlit sphere sitting on the sight axis. */
+function reticle(a, x, y, z) {
+  a.add(new THREE.SphereGeometry(0.0009, 8, 6), 'lp_reticle', { x, y, z });
 }
 
 /** Octagonal prism along Z (handguards). */
@@ -150,10 +162,11 @@ function rifleBody() {
   // rear sight
   a.add(box(0.016, 0.014, 0.012, 0.0015), 'lp_body', { y: 0.114, z: 0.04 });
   // red-dot optic on a cantilever mount (hollow-looking tube, sight centre y .142)
-  a.add(box(0.016, 0.028, 0.03, 0.002), 'lp_body', { y: 0.121, z: 0.0 });
-  a.add(rodZ(0.017, 0.017, 0.08, 12), 'lp_body', { y: 0.142, z: -0.003 });
-  a.add(rodZ(0.019, 0.019, 0.008, 12), 'lp_accent', { y: 0.142, z: -0.04 });
-  a.add(rodZ(0.019, 0.019, 0.008, 12), 'lp_accent', { y: 0.142, z: 0.034 });
+  a.add(box(0.016, 0.028, 0.03, 0.002), 'lp_body', { y: 0.113, z: 0.0 });
+  // Thin wall and no rear ring: the eye sits right behind the tube in ADS.
+  a.add(tubeZ(0.0158, 0.0172, 0.07), 'lp_body', { y: 0.142, z: -0.008 });
+  a.add(tubeZ(0.0158, 0.0188, 0.008), 'lp_accent', { y: 0.142, z: -0.04 });
+  reticle(a, 0, 0.142, -0.04);
   return a;
 }
 
@@ -188,8 +201,9 @@ function smgBody() {
   a.add(box(0.032, 0.1, 0.014, 0.003), 'lp_accent', { y: 0.052, z: 0.222 });
   // compact red dot (sight centre y .123)
   a.add(box(0.028, 0.012, 0.04, 0.002), 'lp_body', { y: 0.1, z: 0.007 });
-  a.add(rodZ(0.0145, 0.0145, 0.05, 12), 'lp_body', { y: 0.123, z: 0.007 });
-  a.add(rodZ(0.0165, 0.0165, 0.006, 12), 'lp_accent', { y: 0.123, z: -0.018 });
+  a.add(tubeZ(0.0128, 0.0142, 0.045), 'lp_body', { y: 0.123, z: 0.005 });
+  a.add(tubeZ(0.0128, 0.0162, 0.006), 'lp_accent', { y: 0.123, z: -0.018 });
+  reticle(a, 0, 0.123, -0.018);
   return a;
 }
 
@@ -225,6 +239,7 @@ function pistolSlide(b) {
   a.add(box(0.003, 0.02, 0.03, 0.001), 'lp_body', { x: -0.0095, y: 0.026, z: oz });
   a.add(box(0.003, 0.02, 0.03, 0.001), 'lp_body', { x: 0.0095, y: 0.026, z: oz });
   a.add(box(0.022, 0.003, 0.03, 0.001), 'lp_accent', { y: Math.min(b.max.y, 0.04) - 0.002, z: oz });
+  reticle(a, 0, 0.026, oz - 0.014);
   return a;
 }
 

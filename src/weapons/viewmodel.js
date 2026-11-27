@@ -111,12 +111,16 @@ export class Viewmodel {
     ctx.viewScene.add(this.anchor);
 
     // ---- arms -------------------------------------------------------------
-    const handMats = {
-      glove: mats.get('glove'),
-      pad: mats.get('glove_pad'),
-      seam: mats.get('glove_seam'),
-      sleeve: mats.get('sleeve'),
-    };
+    // Tablet build: flat palette gloves/sleeves to match the low-poly guns.
+    const lite = !!ctx.config.q?.lite;
+    const handMats = lite
+      ? { glove: mats.get('lp_glove'), pad: mats.get('lp_grip'), seam: mats.get('lp_grip'), sleeve: mats.get('lp_sleeve') }
+      : {
+          glove: mats.get('glove'),
+          pad: mats.get('glove_pad'),
+          seam: mats.get('glove_seam'),
+          sleeve: mats.get('sleeve'),
+        };
     // Shoulder joints in CAMERA space: ~200 mm lateral, ~210 mm below the eye
     // and only just behind it.
     //

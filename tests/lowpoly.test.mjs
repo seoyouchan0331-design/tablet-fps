@@ -42,3 +42,43 @@ for (const [id, build] of [['rifle', buildRifle], ['smg', buildSmg], ['pistol', 
     }
   });
 }
+
+// ADS looks down the sight axis: nothing on the gun may block it.
+const sightClear = (id) => {
+  const m = lowpoly(id);
+  const meshes = [];
+  const add = (asm, offset) => {
+    for (const [k, g] of asm.build()) {
+      if (k === 'lp_reticle') continue; // the reticle dot is meant to be seen
+      const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+      if (offset) mesh.position.fromArray(offset);
+      mesh.updateMatrixWorld();
+      meshes.push(mesh);
+    }
+  };
+  add(m.body);
+  if (m.moving.slide) add(m.moving.slide, m.nodes.slideRest.pos);
+  const [sx, sy, sz] = m.nodes.sight;
+  // A small bundle of rays (within 6 mm of the axis) from 20 cm behind the
+  // sight point, straight down -Z for 50 cm. Exactly on-axis rays can slip
+  // through the degenerate centre vertex of a lathe cap, so offset them.
+  const hits = [];
+  for (const [dx, dy] of [[0.002, 0.001], [-0.004, 0.003], [0.003, -0.004], [-0.001, -0.002], [0.005, 0.002]]) {
+    const rc = new THREE.Raycaster(new THREE.Vector3(sx + dx, sy + dy, sz + 0.2), new THREE.Vector3(0, 0, -1), 0, 0.5);
+    hits.push(...rc.intersectObjects(meshes, false));
+  }
+  return hits;
+};
+
+for (const id of ['rifle', 'smg', 'pistol']) {
+  test(`${id}: the sight picture is not blocked (hollow optic)`, () => {
+    const hits = sightClear(id);
+    assert.equal(hits.length, 0, hits.map((h) => `${h.object.geometry.uuid.slice(0, 4)} @ z=${h.point.z.toFixed(3)}`).join(', '));
+  });
+
+  test(`${id}: has a reticle dot on the sight axis`, () => {
+    const m = lowpoly(id);
+    const part = m.moving.slide ?? m.body;
+    assert.ok(part.build().has('lp_reticle'));
+  });
+}

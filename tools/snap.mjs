@@ -1,4 +1,4 @@
-/** Boot in iPad emulation, press START, screenshot each weapon: node tools/snap.mjs shots/prefix [port] */
+/** Boot in iPad emulation, press START, screenshot each weapon (hip + ADS): node tools/snap.mjs shots/prefix [port] */
 import { chromium, devices } from 'playwright';
 const prefix = process.argv[2] ?? 'shots/snap';
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -14,6 +14,11 @@ for (const id of ['rifle', 'smg', 'pistol']) {
   await p.evaluate((id) => window.__ENGINE__.ctx.peek('weapons').setWeaponImmediate(id), id);
   await p.waitForTimeout(2500);
   await p.screenshot({ path: `${prefix}-${id}.png`, timeout: 240000 });
-  console.log('saved', `${prefix}-${id}.png`);
+  await p.evaluate(() => window.__ENGINE__.ctx.input.toggleAds(true));
+  await p.waitForTimeout(3000);
+  await p.screenshot({ path: `${prefix}-${id}-ads.png`, timeout: 240000 });
+  await p.evaluate(() => window.__ENGINE__.ctx.input.toggleAds(false));
+  await p.waitForTimeout(1500);
+  console.log('saved', `${prefix}-${id}.png`, `${prefix}-${id}-ads.png`);
 }
 await b.close();

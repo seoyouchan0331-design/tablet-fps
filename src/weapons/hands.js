@@ -188,8 +188,10 @@ function buildFingerSimple(materials, spec) {
 function buildGloveSimple(materials, scale) {
   const root = new THREE.Object3D();
   // palm block + wrist cuff
-  root.add(new THREE.Mesh(simpleBox(0.088 * scale, 0.032 * scale, 0.1 * scale, 0, 0, -0.05 * scale), materials.glove));
-  root.add(new THREE.Mesh(simpleBox(0.094 * scale, 0.04 * scale, 0.03 * scale, 0, 0, 0.005 * scale), materials.pad));
+  // Slimmer than a real palm: in pistol ADS the support hand sits right under
+  // the sight line, and a full-size slab hides the lower half of the view.
+  root.add(new THREE.Mesh(simpleBox(0.07 * scale, 0.024 * scale, 0.085 * scale, 0, -0.004 * scale, -0.05 * scale), materials.glove));
+  root.add(new THREE.Mesh(simpleBox(0.074 * scale, 0.03 * scale, 0.022 * scale, 0, -0.004 * scale, 0.002 * scale), materials.pad));
   return root;
 }
 
