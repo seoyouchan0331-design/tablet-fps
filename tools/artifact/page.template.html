@@ -1,0 +1,51 @@
+<title>Tablet FPS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* One-screen game: full-bleed canvas, fixed dark palette in both themes. */
+:root{color-scheme:dark}
+:root:not([data-theme="light"]){color-scheme:dark}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+body{font-family:"Inter","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+/* Pinned to the visible viewport like the HUD (not 100vh: on phones that ran under the address bar). */
+#game{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:none}
+#boot{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;padding:24px max(5vw,16px);background:#0b0d10;color:#dfe6ee;text-align:center}
+#boot h1{font-size:28px;letter-spacing:-.02em}
+#boot .step{font:13px ui-monospace,monospace;color:#9fb0c0;max-width:640px;overflow-wrap:anywhere}
+#boot .t{font:600 15px ui-monospace,monospace;color:#7fd6a8}
+#boot .err{display:none;width:min(720px,100%);max-height:50vh;overflow:auto;text-align:left;font:12px/1.5 ui-monospace,monospace;color:#ff8a80;background:#1a0f10;border:1px solid #5a2a2a;border-radius:6px;padding:10px;white-space:pre-wrap}
+</style>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<div id="boot">
+  <h1>Tablet FPS</h1>
+  <div class="t" id="boot-t">loading 0s</div>
+  <div class="step" id="boot-step">starting script…</div>
+  <div class="err" id="boot-err"></div>
+</div>
+<script>
+{
+  const box = document.getElementById('boot');
+  const stepEl = document.getElementById('boot-step');
+  const tEl = document.getElementById('boot-t');
+  const errEl = document.getElementById('boot-err');
+  const t0 = Date.now();
+  let started = false, done = false;
+  const showErr = (msg) => { errEl.style.display = 'block'; errEl.textContent += msg + '\n'; };
+  const info = console.info.bind(console);
+  console.info = (...a) => { started = true; stepEl.textContent = a.map(String).join(' ').slice(0, 200); info(...a); };
+  const warn = console.warn.bind(console);
+  console.warn = (...a) => { started = true; warn(...a); };
+  addEventListener('error', (e) => showErr('error: ' + (e.message || (e.target && e.target.src ? 'failed to load ' + e.target.src : 'unknown')) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : '')), true);
+  addEventListener('unhandledrejection', (e) => showErr('rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    tEl.textContent = 'loading ' + s + 's';
+    if (window.__READY__ && !done) { done = true; clearInterval(tick); box.remove(); }
+    if (!started && s === 15) showErr('script did not start after 15 s (module blocked or failed to download)');
+  }, 250);
+  const c = document.createElement('canvas');
+  if (!c.getContext('webgl2')) showErr('WebGL2 is not available in this browser');
+}
+</script>
+<script type="module" src="__ENTRY__"></script>
