@@ -21,6 +21,20 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); if 
 await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.waitForFunction(() => window.__READY__ === true, null, { timeout: 240000 });
 
+// Loadout picker: pick SMG and start (also verifies the picker gates control).
+const picker = await page.waitForFunction(() => !!document.querySelector('.ow-loadout:not([hidden])'), null, { timeout: 30000 }).then(() => true, () => false);
+console.log('loadout picker shown', picker);
+if (!picker) fail('loadout picker not shown at boot');
+await page.evaluate(() => {
+  [...document.querySelectorAll('.ow-loadout .card')][1].click();
+  document.querySelector('.ow-loadout .start').click();
+});
+const lo = await page.evaluate(() => { const w = window.__ENGINE__.ctx.peek('weapons'); return { ids: w.loadout.ids(), active: w.activeId }; });
+console.log('loadout', JSON.stringify(lo));
+if (lo.ids[0] !== 'smg' || lo.active !== 'smg') fail('loadout choice not applied');
+const pickerGone = await page.evaluate(() => getComputedStyle(document.querySelector('.ow-loadout')).display === 'none');
+if (!pickerGone) fail('loadout picker still covers the screen after START');
+
 const info = await page.evaluate(() => {
   const e = window.__ENGINE__;
   return { touch: e.ctx.config.touch, quality: e.ctx.config.quality, overlay: !!document.querySelector('.ow-touch'),
@@ -77,6 +91,60 @@ const firing = await page.evaluate(() => window.__ENGINE__.ctx.input.fire);
 console.log('shots fired', fired, 'still firing after release:', firing);
 if (fired < 1) fail('fire button did not fire');
 if (firing) fail('fire stuck after release');
+
+// 2b) practice dummy: freeze it, aim at its chest, hold FIRE, expect hits on the avatar
+await page.evaluate(() => {
+  const e = window.__ENGINE__;
+  const pr = e.ctx.peek('practice');
+  pr._speed = 0; pr._retarget = Infinity;
+  window.__dummyHits = 0; window.__dummyKills = 0;
+  e.ctx.events.on('damage:dealt', (ev) => { if (ev.target?.isAvatar) { window.__dummyHits++; if (ev.killed) window.__dummyKills++; } });
+});
+// The arena's pillar blocks the spawn-to-spawn line by design: move the player
+// to the first nearby spot with a clear line to the dummy's chest.
+const spot = await page.evaluate(() => {
+  const e = window.__ENGINE__; const pl = e.ctx.peek('player'); const ph = e.ctx.peek('physics');
+  const a = e.ctx.peek('practice').avatar.position;
+  const V = pl.position.constructor;
+  for (const [x, z] of [[-3, 8], [3, 8], [-6, 2], [6, 2], [-2, 0.5], [2, -3], [-7, -4]]) {
+    const gy = e.ctx.peek('world').groundHeight(x, z);
+    if (ph.lineOfSight(new V(x, gy + 1.6, z), new V(a.x, a.y + 1.15, a.z))) {
+      pl.movement.teleport(x, gy + 0.03, z);
+      return [x, z];
+    }
+  }
+  return null;
+});
+console.log('clear line from', JSON.stringify(spot));
+if (!spot) fail('no clear line to the dummy from any test spot');
+await frames(3);
+const aimAtDummy = () => page.evaluate(() => {
+  const e = window.__ENGINE__; const pl = e.ctx.peek('player'); const a = e.ctx.peek('practice').avatar.position;
+  const eye = pl.eyePosition; const dx = a.x - eye.x, dy = a.y + 1.1 - eye.y, dz = a.z - eye.z;
+  pl.movement.yaw = Math.atan2(-dx, -dz); pl.movement.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+});
+await aimAtDummy();
+await frames(3);
+const aa = await page.evaluate(() => { const pl = window.__ENGINE__.ctx.peek('player'); const r = pl._aimAssist(1 / 60); return { ...r, level: window.__ENGINE__.ctx.config.aimAssist }; });
+console.log('aim assist on target', JSON.stringify(aa));
+if (aa.level === 'low' && aa.lookScale !== 0.75) fail('aim assist did not slow look on a visible target');
+// The earlier fire test emptied the magazine: reload and wait for rounds.
+await page.keyboard.down('KeyR'); await frames(2); await page.keyboard.up('KeyR');
+await page.waitForFunction(() => window.__ENGINE__.ctx.peek('weapons').ammo.mag > 5, null, { timeout: 60000, polling: 500 }).catch(() => {});
+const ammo = await page.evaluate(() => window.__ENGINE__.ctx.peek('weapons').ammo.mag);
+console.log('mag before dummy test', ammo);
+await page.evaluate(() => { window.__dummyShots = 0; window.__ENGINE__.ctx.events.on('weapon:fire', () => window.__dummyShots++); });
+const fb2 = await page.locator('.ow-touch .fire').boundingBox();
+await touch('touchStart', [{ x: fb2.x + fb2.width / 2, y: fb2.y + fb2.height / 2, id: 7 }]);
+for (let i = 0; i < 40; i++) { await aimAtDummy(); await frames(1); }
+await touch('touchEnd', []);
+await frames(5);
+const dh = await page.evaluate(() => ({ shots: window.__dummyShots, hits: window.__dummyHits, kills: window.__dummyKills, hp: window.__ENGINE__.ctx.peek('practice').dummy.hp }));
+console.log('dummy', JSON.stringify(dh));
+if (dh.hits < 1) fail('no hits registered on the practice dummy');
+const feed = await page.evaluate(() => window.__ENGINE__.ctx.peek('ui').state.scoreUs);
+console.log('kills on HUD', feed);
+if (feed !== dh.kills) fail(`HUD kills ${feed} != dummy deaths ${dh.kills} (double or missed kill)`);
 
 // 3) joystick + look simultaneously, then lift both
 await touch('touchStart', [{ x: vp.width * 0.15, y: vp.height * 0.7, id: 3 }, { x: vp.width * 0.7, y: vp.height * 0.3, id: 4 }]);

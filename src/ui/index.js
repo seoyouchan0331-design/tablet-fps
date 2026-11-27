@@ -14,6 +14,9 @@ import { Prompt, Banner } from './prompts.js';
 import { PauseMenu } from './menu.js';
 import { CombatDemo } from './demo.js';
 import { TouchControls } from './touch.js';
+import { LoadoutPicker } from './loadout.js';
+
+const KILL_FLASH_S = 0.12;
 
 const MAX_BLIPS = 48;
 
@@ -93,6 +96,20 @@ export class UiSystem {
     this.banner = new Banner(this.chromeLayer);
     this.menu = new PauseMenu(this.root, ctx);
     this.touch = ctx.config.touch ? new TouchControls(host, ctx) : null;
+    this.loadout = new LoadoutPicker(host, ctx);
+    // Kill flash: a brief neon wash on the kill shot (<= 120 ms).
+    this.killFlash = el('div', null, this.root);
+    this.killFlash.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0;' +
+      'background:radial-gradient(ellipse at center, rgba(61,242,255,0) 45%, rgba(61,242,255,.55) 100%)';
+    this._flashT = 0;
+    // Shown on the first frame (player/weapons exist by then); capture runs skip it.
+    this._loadoutPending = !ctx.config.deterministic;
+    const lb = el('button', 'ow-btn', this.menu.resumeBtn.parentNode, 'Loadout');
+    lb.type = 'button';
+    lb.addEventListener('click', () => {
+      this.menu.close();
+      this.loadout.show();
+    });
 
     this.health.onBeat = (i) => this.sfx('heartbeat', 0.35 + i * 0.5);
 
@@ -200,6 +217,8 @@ export class UiSystem {
           mine: true,
         });
         this.banner.show('Enemy Eliminated', e.headshot ? '+150 XP · HEADSHOT' : '+100 XP');
+        this._flashT = KILL_FLASH_S;
+        setStyle(this.killFlash, 'opacity', '1');
         this.state.scoreUs++;
       }
     });
@@ -419,6 +438,14 @@ export class UiSystem {
     }
     this.menu.update(rawDt);
     this.touch?.update(rawDt);
+    if (this._flashT > 0) {
+      this._flashT = Math.max(0, this._flashT - rawDt);
+      setStyle(this.killFlash, 'opacity', (this._flashT / KILL_FLASH_S).toFixed(2));
+    }
+    if (this._loadoutPending) {
+      this._loadoutPending = false;
+      this.loadout.show();
+    }
 
     // ---- external state --------------------------------------------------
     // `simulate` means a scripted debug timeline owns the HUD numbers; letting
@@ -611,6 +638,7 @@ export class UiSystem {
     this.banner.dispose();
     this.menu.dispose();
     this.touch?.dispose();
+    this.loadout.dispose();
     this.root.remove();
     removeStyles();
   }

@@ -8,6 +8,7 @@ import { buildRifle } from './models/rifle.js';
 import { buildSmg } from './models/smg.js';
 import { buildPistol } from './models/pistol.js';
 import { clamp, clamp01, lerp, damp, DEG } from './mathx.js';
+import { Loadout } from './loadout.js';
 
 /**
  * WEAPONS — weapon meshes, the first-person viewmodel rig, ADS, recoil, sway,
@@ -67,6 +68,7 @@ export class WeaponSystem {
     this.sim = null;
     this.states = new Map();
     this.activeId = 'rifle';
+    this.loadout = new Loadout();
     this.debugMode = null;
 
     this._fireTimer = 0;
@@ -176,6 +178,7 @@ export class WeaponSystem {
       ctx.events.on('player:land', (e) => this.viewmodel.land(Math.abs(e?.velocity ?? 3)))
     );
     this._off.push(ctx.events.on('player:jump', () => this.viewmodel.jump()));
+    this._off.push(ctx.events.on('loadout:set', (e) => this.setLoadout(e?.primary)));
 
     this.stats = { tris, drawCalls: 0, live: 0, fired: 0 };
     console.info(
@@ -291,6 +294,13 @@ export class WeaponSystem {
     this._switchTo = id;
     this._switchTimer = this.viewmodel.play('holster');
     return true;
+  }
+
+  /** Pick the match loadout; the primary is drawn immediately. */
+  setLoadout(primary = 'rifle') {
+    this.loadout = new Loadout(primary);
+    this.setWeaponImmediate(this.loadout.primary);
+    return this.loadout;
   }
 
   nextWeapon() {
@@ -611,11 +621,10 @@ export class WeaponSystem {
       if (input.actionPressed('reload')) this.reload();
       if (input.pressed('KeyB')) this.cycleFireMode();
       if (input.pressed('KeyI')) this.inspect();
-      if (input.pressed('Digit1')) this.setWeapon('rifle');
-      if (input.pressed('Digit2')) this.setWeapon('smg');
-      if (input.pressed('Digit3')) this.setWeapon('pistol');
-      if (input.pressed('Tab')) this.nextWeapon();
-      if (input.wheel) this.nextWeapon();
+      // Only the two loadout weapons are reachable.
+      if (input.pressed('Digit1')) this.setWeapon(this.loadout.primary);
+      if (input.pressed('Digit2')) this.setWeapon(this.loadout.secondary);
+      if (input.pressed('Tab') || input.wheel) this.setWeapon(this.loadout.other(this.activeId));
       this._runTrigger(dt, input.fire, input.firePressed, def, s);
       st.trigger = input.fire && this.canFire();
       // Auto-reload on a dry trigger pull, like every modern shooter.
