@@ -14,8 +14,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ARENA } from './layout.js';
 
 const GREY = 0x8a8f96;
+/** Floor is darker than the boxes so the ground plane never washes out to white under the sun. */
+const FLOOR = 0x2c3137;
 const NEON = new THREE.Color(0.24, 0.95, 1.0).multiplyScalar(3.0); // HDR, survives exposure
-const GRID = new THREE.Color(0.24, 0.95, 1.0).multiplyScalar(0.35);
+const GRID = new THREE.Color(0.24, 0.95, 1.0).multiplyScalar(0.6);
 const GRID_STEP = 2;
 const KILL_Y = -10;
 
@@ -32,10 +34,12 @@ export class ArenaSystem {
 
     const boxGeos = [];
     const edgeGeos = [];
+    let floorGeo = null;
     for (const b of ARENA.boxes) {
       const g = new THREE.BoxGeometry(b.w, b.h, b.d);
       g.translate(b.x, b.y, b.z);
-      boxGeos.push(g);
+      if (b.floor) floorGeo = g;
+      else boxGeos.push(g);
       edgeGeos.push(...edgeBars(b, b.floor ? 0.08 : 0.045));
     }
     this.material = new THREE.MeshStandardMaterial({ color: GREY, roughness: 0.9, metalness: 0 });
@@ -43,6 +47,10 @@ export class ArenaSystem {
     this.mesh.name = 'arena-boxes';
     this.mesh.userData.surface = 'concrete';
     this.root.add(this.mesh);
+    this.floorMaterial = new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 0.95, metalness: 0 });
+    this.floor = new THREE.Mesh(floorGeo, this.floorMaterial);
+    this.floor.name = 'arena-floor';
+    this.root.add(this.floor);
 
     // Neon edges are thin emissive bars, not GL lines: lines are 1 px on every
     // WebGL implementation and vanish on a Retina tablet.
@@ -58,6 +66,7 @@ export class ArenaSystem {
     this.root.add(this.grid);
 
     for (const g of boxGeos) g.dispose();
+    boxGeos.length = 0;
     for (const g of edgeGeos) g.dispose();
 
     ctx.scene.add(this.root);
@@ -65,6 +74,7 @@ export class ArenaSystem {
 
     const physics = ctx.get('physics');
     physics.addStatic(this.mesh, 'concrete');
+    physics.addStatic(this.floor, 'concrete');
     physics.rebuildStatic();
     const render = ctx.get('render');
     // A merged arena is only 3 meshes — below render's "real level present"
@@ -80,13 +90,13 @@ export class ArenaSystem {
       tag: i === 0 ? 'A' : 'B',
     }));
     this.stats = {
-      staticTris: this.mesh.geometry.index.count / 3,
+      staticTris: (this.mesh.geometry.index.count + this.floor.geometry.index.count) / 3,
       instTris: 0,
       instances: 0,
-      drawCalls: 3,
+      drawCalls: 4,
     };
     this._spawnIndex = 0;
-    console.info(`[arena] ${ARENA.boxes.length} boxes · ${this.stats.staticTris} tris · 3 draw calls`);
+    console.info(`[arena] ${ARENA.boxes.length} boxes · ${this.stats.staticTris} tris · 4 draw calls`);
   }
 
   async prewarmMaterials(ctx = this.ctx) {
@@ -143,6 +153,8 @@ export class ArenaSystem {
   dispose() {
     this.ctx.scene.remove(this.root);
     this.mesh.geometry.dispose();
+    this.floor.geometry.dispose();
+    this.floorMaterial.dispose();
     this.edges.geometry.dispose();
     this.grid.geometry.dispose();
     this.material.dispose();
