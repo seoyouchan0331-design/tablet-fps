@@ -107,6 +107,11 @@ export class BroadcastTransport extends Base {
     this.ch.postMessage({ k: 'data', from: this.role, p: obj });
   }
 
+  /** Same-browser tabs: always a direct path. */
+  async route() {
+    return 'direct';
+  }
+
   close() {
     clearInterval(this._helloTimer);
     clearTimeout(this._timer);

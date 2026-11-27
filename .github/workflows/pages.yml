@@ -26,6 +26,12 @@ jobs:
       - run: npm ci
       - run: node --test tests/*.test.mjs
       - run: npx vite build --sourcemap false
+        env:
+          # Optional closer TURN relay for players on different networks
+          # (src/net/ice.js). Set as repository *variables*, not secrets: the
+          # key ends up in the page anyway, Metered issues it for browser use.
+          VITE_METERED_APP: ${{ vars.METERED_APP }}
+          VITE_METERED_KEY: ${{ vars.METERED_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

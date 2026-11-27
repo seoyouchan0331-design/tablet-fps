@@ -79,7 +79,7 @@ export class Lobby {
   showMenu(error = '') {
     this._clear();
     el('h2', null, this.root, 'Tablet FPS');
-    el('div', 'sub', this.root, '1v1 with a friend on the same Wi-Fi, or practice on your own.');
+    el('div', 'sub', this.root, '1v1 with a friend — same Wi-Fi or anywhere online — or practice on your own.');
     const row = el('div', 'row', this.root);
     this._btn(row, 'CREATE ROOM', 'create', () => this.on.create(), true);
     this._btn(row, 'JOIN', 'join', () => this.showJoin());
@@ -121,7 +121,7 @@ export class Lobby {
     el('div', 'label', this.root, 'ROOM CODE');
     const c = el('div', 'code', this.root, code);
     c.dataset.act = 'room-code';
-    el('div', 'sub', this.root, 'Waiting for your friend to join on the same Wi-Fi…');
+    el('div', 'sub', this.root, 'Send this code to your friend. Same Wi-Fi gives the lowest ping.');
     this._btn(el('div', 'row', this.root), 'CANCEL', 'leave', () => this.on.leave());
   }
 
@@ -134,6 +134,9 @@ export class Lobby {
     el('div', 'label', this.root, `ROOM ${s.code} · ${s.role === 'host' ? 'YOU ARE HOST' : 'CONNECTED'}`);
     el('h2', null, this.root, 'Get ready');
 
+    this.netEl = el('div', 'sub', this.root, '');
+    this.netEl.dataset.act = 'net-info';
+    this.setNet(s.net);
     el('div', 'label', this.root, 'AIM ASSIST');
     const aa = el('div', 'row', this.root);
     for (const v of ['off', 'low', 'medium']) {
@@ -185,6 +188,19 @@ export class Lobby {
     const re = this._btn(row, r.waiting ? 'WAITING…' : 'REMATCH', 'rematch', () => this.on.rematch(), true);
     re.disabled = r.waiting;
     this._btn(row, 'LEAVE', 'leave', () => this.on.leave());
+  }
+
+  /**
+   * Connection line: DIRECT (device to device) or RELAY (via a TURN server,
+   * when the networks don't allow a direct path), and the ping.
+   * @param {{route?:string, rtt?:number|null}} [net]
+   */
+  setNet(net) {
+    if (!this.netEl?.isConnected) return;
+    const route = net?.route === 'direct' ? 'DIRECT' : net?.route === 'relay' ? 'RELAY' : 'CONNECTING…';
+    const ms = net?.rtt != null ? ` · ${Math.round(net.rtt)} ms` : '';
+    const warn = net?.rtt != null && net.rtt > 120 ? ' · laggy' : '';
+    this.netEl.textContent = `Connection: ${route}${ms}${warn}`;
   }
 
   toast(msg, seconds = 2.5) {

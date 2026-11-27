@@ -298,6 +298,7 @@ export class TouchControls {
           ` (phys ${pf.sim.toFixed(0)} upd ${pf.update.toFixed(0)} draw ${pf.render.toFixed(0)})` +
           ` | ${pf.calls} calls ${(pf.tris / 1e6).toFixed(2)}M tris`;
       }
+      if (this.ping != null) txt += ` · ${Math.round(this.ping)}ms`; // duel ping
       this.fps.textContent = txt;
       this._frames = 0;
       this._acc = 0;

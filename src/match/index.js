@@ -28,6 +28,7 @@ import { Lobby } from '../ui/lobby.js';
 import { RoundPick } from '../ui/roundpick.js';
 import { Loadout } from '../weapons/loadout.js';
 import { MAPS } from '../arena/layout.js';
+import { smoothRtt } from '../net/ice.js';
 
 const STATE_HZ = 30;
 /** Both sides ping every second; silence this long means the other device is gone. */
@@ -36,7 +37,7 @@ const SILENCE_S = 4;
 const ERRORS = {
   'room-not-found': 'Room not found. Check the code and that your friend is still on the lobby screen.',
   'room-taken': 'That room code is in use. Try again.',
-  timeout: "Couldn't connect — this Wi-Fi may block direct connections between devices.",
+  timeout: "Couldn't connect — try again, or switch one device to another network (some Wi-Fi blocks game connections).",
   network: "Couldn't reach the connection service. Check the internet connection.",
 };
 
@@ -160,6 +161,13 @@ export class MatchSystem {
 
   _wire() {
     const t = this.transport;
+    this.rtt = null; // ms, smoothed
+    this.route = 'unknown';
+    // the chosen path settles a moment after the channel opens
+    setTimeout(() => t.route?.().then((r) => {
+      this.route = r;
+      this.lobby.setNet({ route: r, rtt: this.rtt });
+    }), 1500);
     // Wall clock, not game time: game time is clamped per frame and would
     // stretch the timeout on a slow device.
     this._lastHeard = performance.now() / 1000;
@@ -189,6 +197,7 @@ export class MatchSystem {
       settings: this.settings,
       myReady: this.ready[this.role],
       oppReady: this.ready[this.other],
+      net: { route: this.route, rtt: this.rtt },
     });
   }
 
@@ -326,6 +335,8 @@ export class MatchSystem {
     this.live = false;
     this.mode = null;
     this.ctx.peek('opponent')?.setVisible(false);
+    const touch = this.ctx.peek('ui')?.touch;
+    if (touch) touch.ping = null;
     const player = this.ctx.peek('player');
     if (player?.health) player.health.regenEnabled = true;
     const ui = this.ctx.peek('ui');
@@ -445,6 +456,18 @@ export class MatchSystem {
   _onMessage(m) {
     if (!m || typeof m !== 'object') return;
     switch (m.type) {
+      case MSG.PING:
+        if (Number.isFinite(m.t)) this._send(MSG.PONG, { t: m.t });
+        break;
+      case MSG.PONG:
+        if (Number.isFinite(m.t)) {
+          const ms = (performance.now() / 1000 - m.t) * 1000;
+          if (ms >= 0 && ms < 5000) this.rtt = smoothRtt(this.rtt, ms);
+          this.lobby.setNet({ route: this.route, rtt: this.rtt });
+          const touch = this.ctx.peek('ui')?.touch;
+          if (touch) touch.ping = this.rtt;
+        }
+        break;
       case MSG.HELLO:
         if (this.role === 'host') this._send(MSG.SETTINGS, this.settings);
         break;
@@ -512,7 +535,7 @@ export class MatchSystem {
     const raw = performance.now() / 1000;
     if (raw - (this._lastPing ?? -1) >= PING_S) {
       this._lastPing = raw;
-      this._send(MSG.PING, {});
+      this._send(MSG.PING, { t: raw });
     }
     if (raw - this._lastHeard > SILENCE_S) {
       this.transport = null;

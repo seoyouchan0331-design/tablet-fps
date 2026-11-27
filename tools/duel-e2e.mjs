@@ -47,6 +47,9 @@ await B.fill('[data-act="code"]', code.toLowerCase());
 await click(B, 'join-go');
 await Promise.all([waitAct(A, 'ready'), waitAct(B, 'ready')]);
 step('both in lobby');
+await B.waitForFunction(() => /\d+ ms/.test(document.querySelector('[data-act="net-info"]')?.textContent ?? ''), null, { timeout: 15000 })
+  .catch(() => fail('lobby never showed a ping'));
+step('net ' + (await B.evaluate(() => document.querySelector('[data-act="net-info"]')?.textContent)));
 
 // host setting propagates to the guest
 await click(A, 'rounds-3');

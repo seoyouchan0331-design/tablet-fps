@@ -14,6 +14,8 @@
  *                   blocks device-to-device traffic)
  *   network         the broker could not be reached
  */
+import { iceServers, buildIceConfig, routeFromStats } from './ice.js';
+
 const PREFIX = 'tfps-';
 
 class PeerTransport {
@@ -42,8 +44,20 @@ class PeerTransport {
   }
 
   static async _peer(id) {
-    const { Peer } = await import('peerjs');
-    return new Peer(id, { debug: 0 });
+    const [{ Peer }, servers] = await Promise.all([import('peerjs'), iceServers(buildIceConfig())]);
+    // null = PeerJS's own STUN + TURN defaults (see ice.js)
+    return new Peer(id, servers ? { debug: 0, config: { iceServers: servers } } : { debug: 0 });
+  }
+
+  /** 'direct' | 'relay' | 'unknown' — how the data is actually travelling. */
+  async route() {
+    const pc = this.conn.peerConnection;
+    if (!pc?.getStats) return 'unknown';
+    try {
+      return routeFromStats(await pc.getStats());
+    } catch {
+      return 'unknown';
+    }
   }
 
   /** Register as host of `code` and resolve once a guest's channel is open. */
