@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DynRes } from '../core/dynres.js';
 
 import { hdrTarget, blit } from './pass.js';
 import { CascadedShadowMaps } from './csm.js';
@@ -17,7 +18,7 @@ import { createComposite, createFxaa, createDebug, createViewComposite } from '.
 import { buildFallbackEnvironment } from './env.js';
 import { RenderProbeScene } from './probe.js';
 
-const QUALITY_LEVEL = { low: 0, medium: 1, high: 2, ultra: 3 };
+const QUALITY_LEVEL = { mobile: 0, low: 0, medium: 1, high: 2, ultra: 3 };
 
 /**
  * Registration range at or below which a punctual light counts as a room/street
@@ -133,6 +134,11 @@ export class RenderSystem {
     this.qLevel = QUALITY_LEVEL[cfg.quality] ?? 3;
     this.rng = ctx.rng.fork();
     this.frame = 0;
+    // Runtime resolution scaling (tablets). Ceiling is the preset's own scale.
+    this.dynres = cfg.dynamicResolution
+      ? new DynRes({ target: 1 / 60, min: Math.min(0.45, q.renderScale), max: q.renderScale })
+      : null;
+    this._lastRaw = 0;
 
     // ---- renderer -------------------------------------------------------
     const renderer = new THREE.WebGLRenderer({
@@ -866,7 +872,9 @@ export class RenderSystem {
   // ==========================================================================
 
   resize(w, h, ctx) {
-    const pr = Math.min(globalThis.devicePixelRatio || 1, 1.5);
+    this._cssW = w;
+    this._cssH = h;
+    const pr = Math.min(globalThis.devicePixelRatio || 1, this.q.maxPixelRatio ?? 1.5);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
 
@@ -1269,6 +1277,15 @@ export class RenderSystem {
     const { scene, camera, viewScene, viewCamera } = ctx;
     const dt = Math.min(0.1, Math.max(1 / 480, ctx.time.dt || 1 / 60));
     this.frame++;
+    if (this.dynres) {
+      const raw = ctx.time.raw;
+      const rawDt = raw - this._lastRaw;
+      this._lastRaw = raw;
+      if (this.dynres.sample(rawDt) && this._cssW) {
+        this.q.renderScale = this.dynres.scale;
+        this.resize(this._cssW, this._cssH, ctx);
+      }
+    }
     renderer.info.reset();
 
     camera.updateMatrixWorld();

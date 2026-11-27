@@ -19,8 +19,27 @@ export const UNITS = {
 };
 
 export const QUALITY_PRESETS = {
+  // Tablets / phones: integrated GPUs at DPR 2. Everything screen-space is off,
+  // the pixel ratio is pinned to 1 and dynamic resolution trims the rest.
+  mobile: {
+    renderScale: 0.7,
+    maxPixelRatio: 1,
+    shadowMapSize: 1024,
+    cascades: 2,
+    shadowDistance: 45,
+    taa: false,
+    gtao: false,
+    ssr: false,
+    volumetrics: false,
+    motionBlur: false,
+    bloom: false,
+    anisotropy: 2,
+    particleBudget: 800,
+    decalBudget: 32,
+  },
   low: {
     renderScale: 0.72,
+    maxPixelRatio: 1.5,
     shadowMapSize: 1024,
     cascades: 3,
     shadowDistance: 60,
@@ -36,6 +55,7 @@ export const QUALITY_PRESETS = {
   },
   medium: {
     renderScale: 0.85,
+    maxPixelRatio: 1.5,
     shadowMapSize: 2048,
     cascades: 3,
     shadowDistance: 90,
@@ -51,6 +71,7 @@ export const QUALITY_PRESETS = {
   },
   high: {
     renderScale: 1.0,
+    maxPixelRatio: 1.5,
     shadowMapSize: 2048,
     cascades: 4,
     shadowDistance: 140,
@@ -66,6 +87,7 @@ export const QUALITY_PRESETS = {
   },
   ultra: {
     renderScale: 1.0,
+    maxPixelRatio: 1.5,
     shadowMapSize: 4096,
     cascades: 4,
     shadowDistance: 200,
@@ -91,7 +113,30 @@ export const DEFAULTS = {
   exposure: 1.0,
   /** Capture mode disables anything nondeterministic so screenshots are stable. */
   deterministic: false,
+  /** Touch controls + touch-first defaults. Set in main.js from detectTouch(). */
+  touch: false,
+  /** Adjust renderScale at runtime to hold the frame-rate target. */
+  dynamicResolution: false,
+  touchSensitivity: 0.0045,
 };
+
+/**
+ * True on a touch-first device (tablet with or without a keyboard, but no mouse).
+ * `?touch=1` / `?touch=0` forces it either way.
+ */
+export function detectTouch(params) {
+  const forced = params?.get?.('touch');
+  if (forced === '1') return true;
+  if (forced === '0') return false;
+  const mm = (q) => globalThis.matchMedia?.(q)?.matches ?? false;
+  const points = globalThis.navigator?.maxTouchPoints ?? 0;
+  return mm('(pointer: coarse)') || (points > 0 && !mm('(any-pointer: fine)'));
+}
+
+/** Touch devices (tablets) boot on the mobile preset; everything else keeps ultra. */
+export function pickDefaultQuality({ touch }) {
+  return touch ? 'mobile' : DEFAULTS.quality;
+}
 
 export function createConfig(overrides = {}) {
   const cfg = { ...DEFAULTS, ...overrides };

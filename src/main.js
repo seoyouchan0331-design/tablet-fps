@@ -1,5 +1,5 @@
 import { Engine } from './core/engine.js';
-import { createConfig } from './core/config.js';
+import { createConfig, detectTouch, pickDefaultQuality } from './core/config.js';
 
 import { RenderSystem } from './render/index.js';
 import { MaterialSystem } from './materials/index.js';
@@ -24,9 +24,13 @@ const capture = params.get('capture') === '1';
 // free-run. See the long comment in src/dev/shots.js.
 const lockstep = capture && params.get('lockstep') === '1';
 
+const touch = !capture && detectTouch(params);
 const config = createConfig({
-  quality: params.get('q') ?? 'ultra',
+  quality: params.get('q') ?? pickDefaultQuality({ touch }),
   deterministic: capture,
+  touch,
+  // `?dynres=0` turns it off for A/B measurement on the device.
+  dynamicResolution: !capture && (params.get('dynres') ?? (touch ? '1' : '0')) === '1',
 });
 
 const canvas = document.getElementById('game');

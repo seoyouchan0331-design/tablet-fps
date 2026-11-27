@@ -1,6 +1,6 @@
 import { el, setText, setStyle, clamp, damp, ease } from './util.js';
 
-const PRESETS = ['low', 'medium', 'high', 'ultra'];
+const PRESETS = ['mobile', 'low', 'medium', 'high', 'ultra'];
 
 /**
  * Pause / settings menu.
@@ -85,7 +85,7 @@ export class PauseMenu {
       this.sens.set(1);
       this.fov.set(80);
       this.ctx.config.invertY = false;
-      this.setQuality('ultra');
+      this.setQuality(this.ctx.config.touch ? 'mobile' : 'ultra');
     });
     el('div', 'hint', inner, 'ESC RESUME · WASD MOVE · SHIFT SPRINT · R RELOAD · F USE');
 
@@ -133,6 +133,14 @@ export class PauseMenu {
   }
 
   setQuality(name) {
+    // The render pipeline (TAA, GTAO, shadow cascades...) is built once in init,
+    // so a real preset change needs a fresh boot. Capture/tests keep the old path.
+    if (!this.ctx.config.deterministic && name !== this.ctx.config.quality && globalThis.location) {
+      const url = new URL(location.href);
+      url.searchParams.set('q', name);
+      location.replace(url.toString());
+      return;
+    }
     try {
       this.ctx.config.setQuality(name);
       this.ctx.events.emit('ui:quality', { quality: name });
