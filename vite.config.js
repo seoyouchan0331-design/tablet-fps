@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Relative asset paths: the game is served from a sub-path on GitHub Pages
+  // (https://<user>.github.io/tablet-fps/).
+  base: './',
   // Bind IPv4 explicitly: the default `localhost` binds ::1 only on macOS,
   // which the capture harness (127.0.0.1) cannot reach.
   // `hmr: false` when the capture harness owns the server (OW_NO_HMR=1): a file
