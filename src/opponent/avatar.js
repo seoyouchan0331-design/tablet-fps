@@ -51,7 +51,17 @@ export function loadCharacterModel() {
         // that depends on the entry module, which is still evaluating (main.js
         // top-level-awaits engine.init) — the import never settles and boot hangs.
         const base = (import.meta.env && import.meta.env.BASE_URL) || './';
-        return await new GLTFLoader().loadAsync(base + MODEL_URL);
+        const loader = new GLTFLoader();
+        try {
+          return await loader.loadAsync(base + MODEL_URL);
+        } catch (err) {
+          // Hosts that don't serve .glb (claude.ai artifacts) get the same
+          // bytes as base64 text: models/robot.glb.b64.txt
+          const res = await fetch(base + MODEL_URL + '.b64.txt');
+          if (!res.ok) throw err;
+          const bin = Uint8Array.from(atob((await res.text()).trim()), (c) => c.charCodeAt(0));
+          return await loader.parseAsync(bin.buffer, base + 'models/');
+        }
       } catch (err) {
         console.warn('[avatar] character model unavailable, using mannequin:', err?.message ?? err);
         return null;
