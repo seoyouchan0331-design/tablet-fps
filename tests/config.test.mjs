@@ -20,8 +20,7 @@ test('default quality follows input device', () => {
   assert.equal(pickDefaultQuality({ touch: false }), 'ultra');
 });
 
-test('mobile preset: one shadow cascade, no depth prepass', () => {
+test('mobile preset: one shadow cascade; depth prepass stays on (sky aerial perspective needs depth)', () => {
   assert.equal(QUALITY_PRESETS.mobile.cascades, 1);
-  assert.equal(QUALITY_PRESETS.mobile.prepass, false);
-  for (const [name, q] of Object.entries(QUALITY_PRESETS)) if (name !== 'mobile') assert.equal(q.prepass, true, name);
+  for (const [name, q] of Object.entries(QUALITY_PRESETS)) assert.equal(q.prepass, true, name);
 });

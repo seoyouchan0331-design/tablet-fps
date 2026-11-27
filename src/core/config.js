@@ -27,8 +27,9 @@ export const QUALITY_PRESETS = {
     shadowMapSize: 1024,
     cascades: 1,
     shadowDistance: 45,
-    // Nothing in the mobile pipeline reads depth/normal/velocity: skip the pass.
-    prepass: false,
+    // Kept on: sky's aerial-perspective composite always reads depth, and
+    // without it every pixel below the horizon fogs over. Cheap in the arena.
+    prepass: true,
     taa: false,
     gtao: false,
     ssr: false,
