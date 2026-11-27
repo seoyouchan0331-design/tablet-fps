@@ -4,12 +4,11 @@ import { createConfig, detectTouch, pickDefaultQuality } from './core/config.js'
 import { RenderSystem } from './render/index.js';
 import { MaterialSystem } from './materials/index.js';
 import { SkySystem } from './sky/index.js';
-import { WorldSystem } from './world/index.js';
+import { ArenaSystem } from './arena/index.js';
 import { PhysicsSystem } from './physics/index.js';
 import { PlayerSystem } from './player/index.js';
 import { WeaponSystem } from './weapons/index.js';
 import { FxSystem } from './fx/index.js';
-import { AiSystem } from './ai/index.js';
 import { UiSystem } from './ui/index.js';
 import { AudioSystem } from './audio/index.js';
 
@@ -42,12 +41,11 @@ engine
   .add(RenderSystem)
   .add(MaterialSystem)
   .add(SkySystem)
-  .add(WorldSystem)
+  .add(ArenaSystem)
   .add(PhysicsSystem)
   .add(PlayerSystem)
   .add(WeaponSystem)
   .add(FxSystem)
-  .add(AiSystem)
   .add(UiSystem)
   .add(AudioSystem);
 

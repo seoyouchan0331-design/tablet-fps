@@ -15,6 +15,7 @@ const ctx = await browser.newContext({ ...devices['iPad Pro 11 landscape'] });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
+page.on('response', (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); if (process.env.VERBOSE) console.log('[page]', m.type(), m.text().slice(0, 160)); });
 
 await page.goto(`http://127.0.0.1:${PORT}/`);

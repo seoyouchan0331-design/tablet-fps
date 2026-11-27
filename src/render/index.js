@@ -228,7 +228,7 @@ export class RenderSystem {
 
     // Always on: depthTexture/velocityTexture are part of the public contract
     // (soft particles, SSR, motion blur) even when our own effects are off.
-    this.needsPrepass = true;
+    this.needsPrepass = q.prepass !== false;
 
     this.hdrRt = null;
     this.viewRt = null;
@@ -932,9 +932,11 @@ export class RenderSystem {
     this.composite.uniforms.uResolution.value.set(rw, rh);
     if (this.fxaa) this.fxaa.uniforms.uTexel.value.set(1 / rw, 1 / rh);
 
-    this.depthTexture = this.gbuffer.depthTexture;
-    this.velocityTexture = this.gbuffer.velocityTexture;
-    this.normalTexture = this.gbuffer.normalTexture;
+    // Without a prepass these targets are never written: publish null so
+    // consumers (soft particles, metering) take their no-depth path.
+    this.depthTexture = this.needsPrepass ? this.gbuffer.depthTexture : null;
+    this.velocityTexture = this.needsPrepass ? this.gbuffer.velocityTexture : null;
+    this.normalTexture = this.needsPrepass ? this.gbuffer.normalTexture : null;
 
     for (const p of this.passes) p.resize?.(rw, rh);
     this.taa?.reset();
@@ -1228,7 +1230,7 @@ export class RenderSystem {
     // own placeholder; the probe only steps aside for a real level.
     const FOREIGN_LIMIT = 6;
     if (this.probeActive) {
-      if (this._foreignMeshes >= FOREIGN_LIMIT) {
+      if (this._foreignMeshes >= FOREIGN_LIMIT || this.probeDisabled) {
         ctx.scene.remove(this.probe.group);
         this.probe.dispose();
         this.probeActive = false;
@@ -1236,7 +1238,7 @@ export class RenderSystem {
       }
       return;
     }
-    if (this.frame > 4 || this._foreignMeshes >= FOREIGN_LIMIT) return;
+    if (this.probeDisabled || this.frame > 4 || this._foreignMeshes >= FOREIGN_LIMIT) return;
     const g = this.probe.build();
     g.traverse((o) => {
       o.userData.owProbe = true;
