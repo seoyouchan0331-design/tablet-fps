@@ -6,6 +6,8 @@
  * the transition happened — read them in update(), not fixedUpdate().
  */
 
+import { TouchState } from './touch.js';
+
 export const ACTIONS = {
   forward: ['KeyW', 'ArrowUp'],
   back: ['KeyS', 'ArrowDown'],
@@ -14,7 +16,7 @@ export const ACTIONS = {
   jump: ['Space'],
   crouch: ['ControlLeft', 'KeyC'],
   prone: ['KeyZ'],
-  sprint: ['ShiftLeft'],
+  sprint: ['ShiftLeft', 'TouchSprint'],
   reload: ['KeyR'],
   use: ['KeyF'],
   melee: ['KeyV'],
@@ -47,6 +49,12 @@ export class Input {
     this.enabled = true;
     /** Set true by capture mode so scripted shots aren't fought by real input. */
     this.frozen = false;
+
+    /** Touch-first device: on-screen controls drive look/fire/move. */
+    this.touch = !!config.touch;
+    this.touchState = new TouchState();
+    this._touchSprint = false;
+    this._adsToggled = false;
 
     this.gamepadIndex = null;
     this.stick = { moveX: 0, moveY: 0, lookX: 0, lookY: 0 };
@@ -115,13 +123,13 @@ export class Input {
   }
 
   _onMouseDown(e) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.touch) return;
     if (!this.pointerLocked && e.button === 0) this.requestPointerLock();
     this._pendingDown.add(`Mouse${e.button}`);
   }
 
   _onMouseUp(e) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.touch) return;
     this._pendingUp.add(`Mouse${e.button}`);
   }
 
@@ -142,8 +150,22 @@ export class Input {
     if (!this.pointerLocked) this._onBlur();
   }
 
+  /** On-screen button press/release, mapped onto the same codes as the keyboard. */
+  touchButton(code, down) {
+    if (!this.enabled) return;
+    (down ? this._pendingDown : this._pendingUp).add(code);
+  }
+
+  /** ADS on touch is a toggle (holding a button while aiming is awkward one-handed). */
+  toggleAds(on = !this._adsToggled) {
+    this._adsToggled = on;
+    this.touchButton('Mouse2', on);
+  }
+
   /** Losing focus must release every held key, or the player runs forever. */
   _onBlur() {
+    this.touchState.cancelAll();
+    this._adsToggled = false;
     for (const code of this.down) this._pendingUp.add(code);
     this._rawLook.x = 0;
     this._rawLook.y = 0;
@@ -175,6 +197,34 @@ export class Input {
     this._pendingWheel = 0;
 
     this._pollGamepad();
+    if (this.touch) this._applyTouch();
+  }
+
+  _applyTouch() {
+    const ts = this.touchState;
+    const d = ts.consume();
+    if (!this.frozen) {
+      const k = this.config.touchSensitivity ?? 0.0045;
+      this.look.x += d.x * k;
+      this.look.y += d.y * k * (this.config.invertY ? -1 : 1);
+    }
+    // Same path as the gamepad left stick (moveY is screen-down positive).
+    this.stick.moveX += ts.axis.x;
+    this.stick.moveY -= ts.axis.y;
+    // Fire / sprint as held virtual codes so pressed/released edges still work.
+    this._syncHeld('Mouse0', ts.fire);
+    this._syncHeld('TouchSprint', ts.sprint);
+  }
+
+  _syncHeld(code, want) {
+    const has = this.down.has(code);
+    if (want && !has) {
+      this.down.add(code);
+      this._pressed.add(code);
+    } else if (!want && has) {
+      this.down.delete(code);
+      this._released.add(code);
+    }
   }
 
   endFrame() {}
