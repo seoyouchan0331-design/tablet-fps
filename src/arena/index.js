@@ -62,22 +62,31 @@ export class ArenaSystem {
     if (this.mesh) {
       physics.removeStatic(this.mesh);
       physics.removeStatic(this.floor);
-      for (const o of [this.mesh, this.floor, this.edges, this.grid]) {
+      if (this.clip) physics.removeStatic(this.clip);
+      for (const o of [this.mesh, this.floor, this.edges, this.grid, this.deco, this.clip]) {
+        if (!o) continue;
         this.root.remove(o);
         o.geometry.dispose();
       }
+      this.deco = this.clip = null;
     }
     const layout = map.layout;
     this.layout = layout;
     this.mapId = key;
 
+    // solid pieces collide and draw; deco pieces only draw (railings, shutters,
+    // awnings: no snagging, nothing for physics to test); hidden pieces only
+    // collide (the smooth ramp under a flight of drawn steps)
     const boxGeos = [];
+    const decoGeos = [];
+    const clipGeos = [];
     const edgeGeos = [];
     let floorGeo = null;
     for (const b of layout.boxes) {
       if (b.floor) floorGeo = pieceGeometry(b, layout.floorColor ?? FLOOR);
-      else boxGeos.push(pieceGeometry(b, layout.color ?? GREY));
-      edgeGeos.push(...edgeGeometries(b, b.floor ? 0.08 : 0.045, layout.edgeColor));
+      else if (b.hidden) clipGeos.push(pieceGeometry(b, GREY));
+      else (b.deco ? decoGeos : boxGeos).push(pieceGeometry(b, layout.color ?? GREY));
+      if (!b.hidden) edgeGeos.push(...edgeGeometries(b, b.floor ? 0.08 : 0.045, layout.edgeColor));
     }
     this.mesh = new THREE.Mesh(mergeGeometries(boxGeos), this.material);
     this.mesh.name = 'arena-boxes';
@@ -93,12 +102,26 @@ export class ArenaSystem {
     this.grid.visible = layout.grid !== false;
     this.grid.userData.owNoShadow = true;
     this.root.add(this.mesh, this.floor, this.edges, this.grid);
+    if (decoGeos.length) {
+      this.deco = new THREE.Mesh(mergeGeometries(decoGeos), this.material);
+      this.deco.name = 'arena-deco';
+      this.deco.castShadow = this.deco.receiveShadow = true;
+      this.root.add(this.deco);
+    }
+    if (clipGeos.length) {
+      this.clip = new THREE.Mesh(mergeGeometries(clipGeos), this.material);
+      this.clip.name = 'arena-clip';
+      this.clip.visible = false;
+      this.root.add(this.clip);
+    }
+    for (const g of [...decoGeos, ...clipGeos]) g.dispose();
     for (const g of boxGeos) g.dispose();
     for (const g of edgeGeos) g.dispose();
     this.root.updateMatrixWorld(true);
 
     physics.addStatic(this.mesh, 'concrete');
     physics.addStatic(this.floor, 'concrete');
+    if (this.clip) physics.addStatic(this.clip, 'concrete');
     physics.rebuildStatic();
 
     const h = layout.size / 2, hz = (layout.depth ?? layout.size) / 2;

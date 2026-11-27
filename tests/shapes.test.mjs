@@ -107,3 +107,34 @@ test('two-storey building: enter by the door, walk up the stairs to the upper fl
   // every piece stays inside the footprint (plus small trims)
   for (const b of B) assert.ok(Math.abs(b.x - 10) <= 5.4 && Math.abs(b.z + 10) <= 4.4, JSON.stringify(b));
 });
+
+test('stairs never block a door: they move to a wall without one', () => {
+  // the case that shipped: a door in the -z wall, where the stairs used to go
+  const B = building({ x: 0, z: 0, w: 9, d: 8, stair: '-x', doors: [{ side: '-z', at: 1.5 }] });
+  const ramp = B.find((b) => b.ramp);
+  // one step inside the door (world (1.5, -3.2)) the floor is flat ground, not stairs
+  assert.ok(topAt(ramp, 1.5, -3.2) === -Infinity, 'stairs sit in front of the door');
+  // doors on both long walls: the stairs pick the run that clears both
+  const C = building({ x: 0, z: 0, w: 10, d: 8, doors: [{ side: '-z', at: -2.5 }, { side: '+z', at: 2.5 }] });
+  const r = C.find((b) => b.ramp);
+  for (const [dx, dz] of [[-2.5, -3.2], [2.5, 3.2]]) assert.ok(topAt(r, dx, dz) === -Infinity, `door at ${dx},${dz} blocked`);
+  // a door on the short wall at the stairs' high end is not blocked either
+  const D = building({ x: 0, z: 0, w: 10, d: 8, stair: '+x', doors: [{ side: '+x', at: -2.9 }] });
+  const rd = D.find((b) => b.ramp);
+  assert.ok(topAt(rd, 4.3, -2.9) === -Infinity || topAt(rd, 4.3, -2.9) < 0.3, 'high end blocks the side door');
+});
+
+import { stairFlight } from '../src/arena/shapes.js';
+test('stair flight: drawn steps plus a hidden ramp that climbs the same way', () => {
+  for (const dir of ['+z', '-z', '+x', '-x']) {
+    const [steps, ramp] = stairFlight(10, 5, dir);
+    assert.ok(steps.deco && steps.prop === 'stairs');
+    assert.ok(ramp.hidden && ramp.ramp === dir);
+    // foot of the flight at (10, 5): the ramp is at ground there, 3.2 m at the far end
+    const v = { '+z': [0, 1], '-z': [0, -1], '+x': [1, 0], '-x': [-1, 0] }[dir];
+    assert.ok(topAt(ramp, 10 + v[0] * 0.2, 5 + v[1] * 0.2) < 0.3, `${dir} foot`);
+    assert.ok(topAt(ramp, 10 + v[0] * 5.4, 5 + v[1] * 5.4) > 2.9, `${dir} head`);
+    // the drawn steps cover the same footprint
+    assert.ok(Math.abs(steps.x - ramp.x) < 0.25 && Math.abs(steps.z - ramp.z) < 0.25, `${dir} steps off the ramp`);
+  }
+});

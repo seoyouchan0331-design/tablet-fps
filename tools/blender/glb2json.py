@@ -23,26 +23,32 @@ def read_glb(path):
         for k in range(n):
             out.extend(struct.unpack_from('<' + fmt * comps, bin_, off + k * stride))
         return out
-    pos, idx = [], []
+    # body = every node not named neon*, neon = the glowing strips
+    parts = {'body': ([], []), 'neon': ([], [])}
     for node in j['nodes']:
         if 'mesh' not in node: continue
+        key = 'neon' if node.get('name', '').startswith('neon') else 'body'
+        pos, idx = parts[key]
         t = node.get('translation', [0, 0, 0])
         for prim in j['meshes'][node['mesh']]['primitives']:
             p = acc(prim['attributes']['POSITION']); base = len(pos) // 3
             for k in range(0, len(p), 3):
                 pos += [p[k] + t[0], p[k + 1] + t[1], p[k + 2] + t[2]]
             idx += [base + i for i in acc(prim['indices'])]
-    return pos, idx
+    return parts
 
 src, dst = sys.argv[1], sys.argv[2]
 props = {}
 for f in sorted(glob.glob(os.path.join(src, '*.glb'))):
-    pos, idx = read_glb(f)
+    parts = read_glb(f)
+    pos, idx = parts['body']
     pos = [round(v, 3) for v in pos]
-    xs, ys, zs = pos[0::3], pos[1::3], pos[2::3]
-    props[os.path.basename(f)[:-4]] = {
-        'min': [min(xs), min(ys), min(zs)], 'max': [max(xs), max(ys), max(zs)],
-        'positions': pos, 'indices': idx,
-    }
-    print(os.path.basename(f), len(pos) // 3, 'verts', len(idx) // 3, 'tris', 'bounds', props[os.path.basename(f)[:-4]]['min'], props[os.path.basename(f)[:-4]]['max'])
+    npos, nidx = parts['neon']
+    allp = pos + [round(v, 3) for v in npos]
+    xs, ys, zs = allp[0::3], allp[1::3], allp[2::3]
+    name = os.path.basename(f)[:-4]
+    props[name] = {'min': [min(xs), min(ys), min(zs)], 'max': [max(xs), max(ys), max(zs)], 'positions': pos, 'indices': idx}
+    if npos:
+        props[name]['neon'] = {'positions': [round(v, 3) for v in npos], 'indices': nidx}
+    print(name, len(pos) // 3, 'verts', len(idx) // 3, 'tris', 'neon tris', len(nidx) // 3, 'bounds', props[name]['min'], props[name]['max'])
 json.dump(props, open(dst, 'w'), separators=(',', ':'))

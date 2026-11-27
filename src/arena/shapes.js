@@ -53,29 +53,77 @@ export function topAt(b, x, z) {
 /** The 180-degree twin of a piece (point symmetry about the map centre). */
 export function mirrorPiece(b) {
   const flip = { '+x': '-x', '-x': '+x', '+z': '-z', '-z': '+z' };
-  return { ...b, x: b.x === 0 ? 0 : -b.x, z: b.z === 0 ? 0 : -b.z, ...(b.ramp ? { ramp: flip[b.ramp] } : {}) };
+  // a prop has a front: turned 180 degrees with its position (a box doesn't care)
+  const ry = b.prop && !b.sym ? (b.ry ?? 0) + Math.PI : b.ry;
+  return { ...b, x: b.x === 0 ? 0 : -b.x, z: b.z === 0 ? 0 : -b.z, ...(b.ramp ? { ramp: flip[b.ramp] } : {}), ...(ry != null ? { ry } : {}) };
 }
 
 /* ------------------------------------------------------------- helpers -- */
 
-/** A Blender prop as a piece: its bounds give w/h/d, standing on y0, turned by ry. */
-export function prop(name, x, z, ry = 0, y0 = 0) {
+/**
+ * A flight of drawn stone steps (Blender 'stairs', 3.2 m rise over 5.6 m)
+ * whose foot is at (x, y0, z), climbing toward `dir`, with its side wall on
+ * the right as you climb. Players walk on a hidden smooth ramp under the
+ * steps (no step-up snagging); the steps are drawn only.
+ */
+export function stairFlight(x, z, dir = '+z', y0 = 0) {
+  const ry = { '+z': 0, '-z': Math.PI, '+x': Math.PI / 2, '-x': -Math.PI / 2 }[dir];
+  const RUN = 5.6, RISE = 3.2, W = 1.6;
+  const c = Math.cos(ry), s = Math.sin(ry);
+  // the model's origin is the middle of the flight; its foot is RUN/2 back
+  const ox = x + (RUN / 2) * s, oz = z + (RUN / 2) * c;
+  const along = dir[1] === 'z';
+  return [
+    prop('stairs', ox, oz, ry, y0, { deco: true }),
+    { x: ox, y: y0 + RISE / 2, z: oz, w: along ? W : RUN, h: RISE, d: along ? RUN : W, ramp: dir, hidden: true },
+  ];
+}
+
+/**
+ * A Blender prop as a piece. (x, y0, z) is where the model's own origin goes
+ * (its base; for wall pieces the point on the wall face), ry turns it, and
+ *   opts.sx  stretches it along its own x (cornices, parapets: 1 m models)
+ *   opts.deco  visual only: no collision (railings, shutters, awnings)
+ * The piece's x/y/z/w/h/d are its bounding box, as for any other piece.
+ */
+export function prop(name, x, z, ry = 0, y0 = 0, opts = {}) {
   const p = PROPS[name];
   if (!p) throw new Error(`unknown prop "${name}"`);
-  const w = p.max[0] - p.min[0], h = p.max[1] - p.min[1], d = p.max[2] - p.min[2];
-  return { prop: name, x, y: y0 + h / 2, z, w, h, d, ...(ry ? { ry } : {}) };
+  const sx = opts.sx ?? 1;
+  const w = (p.max[0] - p.min[0]) * sx, h = p.max[1] - p.min[1], d = p.max[2] - p.min[2];
+  const cx = ((p.min[0] + p.max[0]) / 2) * sx, cy = (p.min[1] + p.max[1]) / 2, cz = (p.min[2] + p.max[2]) / 2;
+  const c = Math.cos(ry), s = Math.sin(ry);
+  return {
+    prop: name, x: x + cx * c + cz * s, y: y0 + cy, z: z - cx * s + cz * c, w, h, d,
+    ...(ry ? { ry } : {}), ...(sx !== 1 ? { sx } : {}), ...(opts.deco ? { deco: true } : {}),
+  };
+}
+
+function rawGeometry(src, sx, p) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(src.positions, 3));
+  g.setIndex(src.indices);
+  const flat = g.toNonIndexed();
+  g.dispose();
+  if (sx !== 1) flat.scale(sx, 1, 1);
+  flat.translate(-((p.min[0] + p.max[0]) / 2) * sx, -(p.min[1] + p.max[1]) / 2, -(p.min[2] + p.max[2]) / 2);
+  flat.computeVertexNormals();
+  return flat;
 }
 
 function propGeometry(b) {
   const p = PROPS[b.prop];
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(p.positions, 3));
-  g.setIndex(p.indices);
-  const flat = g.toNonIndexed();
-  g.dispose();
-  flat.translate(-(p.min[0] + p.max[0]) / 2, -(p.min[1] + p.max[1]) / 2, -(p.min[2] + p.max[2]) / 2);
-  flat.computeVertexNormals();
-  return flat;
+  return rawGeometry(p, b.sx ?? 1, p);
+}
+
+/** The prop's own neon strips, placed like its body (null when it has none). */
+function propNeon(b) {
+  const p = PROPS[b.prop];
+  if (!p.neon) return null;
+  const g = rawGeometry(p.neon, b.sx ?? 1, p);
+  if (b.ry) g.rotateY(b.ry);
+  g.translate(b.x, b.y, b.z);
+  return g;
 }
 
 /**
@@ -133,8 +181,9 @@ export function wallWithOpenings({ axis = 'x', from, to, at, y0 = 0, h = 3, t = 
  * A two-storey building, axis-aligned, centred on (x, z), w x d metres.
  *   doors:   [{ side: '+x'|'-x'|'+z'|'-z', at, w = 1.6 }]   ground floor
  *   windows: [{ side, floor: 0|1, at, w = 1.4 }]
- *   stair:   '+x' | '-x'  which way the inside stairs climb (along x,
- *            against the -z inner wall); the upper slab has a hole over them
+ *   stair:   '+x' | '-x'  which way the inside stairs climb (along x, against
+ *            a long inner wall with no door in the way); the upper slab has a
+ *            hole over them
  * Detailing: a band between the floors, a cornice on the roof and square
  * pilasters on the corners, all a few cm proud of the walls.
  */
@@ -159,18 +208,37 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
     out.push(...quiet(wallWithOpenings({ axis: 'z', from: z - hd + t, to: z + hd - t, at: x + hw - t / 2, y0, h, t, openings: shift(opens('+x', f), z) })));
     out.push(...quiet(wallWithOpenings({ axis: 'z', from: z - hd + t, to: z + hd - t, at: x - hw + t / 2, y0, h, t, openings: shift(opens('-x', f), z) })));
   }
-  // stairs: a ramp along x against the -z inner wall, rising to the slab
+  // stairs: a ramp along x against one long inner wall, rising to the slab.
+  // Pick the wall and direction that keep every door clear (the asked-for
+  // direction first): a door must never open onto the stairs.
   const sw = 1.5; // stair width
   const run = Math.min(w - 2 * t - 1.2, 6.2); // leave a landing at the top
-  const zS = z - hd + t + sw / 2;
   const xIn = x - hw + t, xOut = x + hw - t;
-  const r0 = stair === '+x' ? xIn : xOut - run; // ramp spans r0..r0+run
-  out.push({ x: r0 + run / 2, y: (fh - slab) / 2 + slab / 2, z: zS, w: run, h: fh, d: sw, ramp: stair, noEdge: false });
+  const options = [];
+  for (const wall of ['-z', '+z']) for (const dir of [stair, stair === '+x' ? '-x' : '+x']) options.push({ wall, dir });
+  options.sort((a, b) => (a.dir === stair ? 0 : 1) - (b.dir === stair ? 0 : 1));
+  const blocks = ({ wall, dir }) => {
+    const r0 = dir === '+x' ? xIn : xOut - run;
+    const zA = wall === '-z' ? z - hd : z + hd - t - sw, zB = zA + t + sw; // stair band incl. wall
+    return doors.some((o) => {
+      const half = (o.w ?? 1.6) / 2 + 0.15;
+      if (o.side === wall) return x + o.at + half > r0 && x + o.at - half < r0 + run; // door in the wall behind the stairs
+      const highEnd = dir === '+x' ? '+x' : '-x';
+      if (o.side === highEnd) return z + o.at + half > zA && z + o.at - half < zB; // door at the stair head
+      return false;
+    });
+  };
+  const pick = options.find((o) => !blocks(o)) ?? options[0];
+  const sdir = pick.dir;
+  const zS = pick.wall === '-z' ? z - hd + t + sw / 2 : z + hd - t - sw / 2;
+  const r0 = sdir === '+x' ? xIn : xOut - run; // ramp spans r0..r0+run
+  out.push({ x: r0 + run / 2, y: (fh - slab) / 2 + slab / 2, z: zS, w: run, h: fh, d: sw, ramp: sdir, noEdge: false });
   // upper slab with a hole over the stairs
-  const zTop = z + hd - t, zStair = z - hd + t + sw;
   const slabY = fh - slab / 2;
-  out.push({ x: (xIn + xOut) / 2, y: slabY, z: (zStair + zTop) / 2, w: xOut - xIn, h: slab, d: zTop - zStair, noEdge: true }); // beside the stairs
-  const landA = stair === '+x' ? r0 + run : xIn, landB = stair === '+x' ? xOut : r0; // the landing at the stair head
+  const zA = pick.wall === '-z' ? z - hd + t + sw : z - hd + t; // slab beside the stairs: zA..zB
+  const zB = pick.wall === '-z' ? z + hd - t : z + hd - t - sw;
+  out.push({ x: (xIn + xOut) / 2, y: slabY, z: (zA + zB) / 2, w: xOut - xIn, h: slab, d: zB - zA, noEdge: true });
+  const landA = sdir === '+x' ? r0 + run : xIn, landB = sdir === '+x' ? xOut : r0; // the landing at the stair head
   if (landB - landA > 0.05) out.push({ x: (landA + landB) / 2, y: slabY, z: zS, w: landB - landA, h: slab, d: sw, noEdge: true });
   // roof slab, cornice, string course, corner pilasters
   out.push({ x, y: 2 * fh + slab / 2, z, w, h: slab, d, noEdge: true });
@@ -244,6 +312,12 @@ function bar(p, q, t) {
 /** Edge bars along the piece's hard edges (any shape, turned or not). */
 export function edgeGeometries(b, t, fallback = DEFAULT_EDGE) {
   if (b.noEdge) return [];
+  if (b.prop && PROPS[b.prop].neon) {
+    const g = propNeon(b);
+    if (g.attributes.uv) g.deleteAttribute('uv');
+    return [paint(g, b.e ?? fallback)];
+  }
+  if (b.prop && b.deco) return [];
   const surf = b.prop ? propGeometry(b) : b.ramp ? wedge(b) : new THREE.BoxGeometry(b.w, b.h, b.d);
   if (b.ry) surf.rotateY(b.ry);
   surf.translate(b.x, b.y, b.z);

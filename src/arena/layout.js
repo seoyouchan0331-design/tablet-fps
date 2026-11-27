@@ -224,7 +224,7 @@ export const MAPS = {
       depth: TOWN_D,
       boxes: [
         ...shell(TOWN_W, TOWN_D),
-        prop('fountain', 0, 0), // its own twin
+        { ...prop('fountain', 0, 0), sym: true }, // its own twin
         ...TOWN_HALF,
         ...TOWN_HALF.map(mirror),
       ],
@@ -252,6 +252,13 @@ export const MAP_IDS = Object.keys(MAPS);
 
 const EPS = 1e-6;
 const same = (a, b) => Math.abs(a - b) < EPS;
+/** Twins match in turn: a prop's twin faces the other way (+180 degrees),
+ *  unless it looks the same turned round (sym: fountains, towers). */
+const sameTurn = (o, b) => {
+  const want = (b.ry ?? 0) + (b.prop && !b.sym ? Math.PI : 0);
+  const d = (((o.ry ?? 0) - want) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+  return Math.abs(d) < 1e-6;
+};
 
 /** Returns a list of problems; an empty list means the layout is usable. */
 export function validateLayout(layout) {
@@ -267,7 +274,7 @@ export function validateLayout(layout) {
     if (Math.abs(b.x) + ex > h + EPS || Math.abs(b.z) + ez > hz + EPS) errors.push(`box at ${b.x},${b.z} is outside the arena`);
     const twin = layout.boxes.find(
       (o) => same(o.x, -b.x) && same(o.z, -b.z) && same(o.y, b.y) && same(o.w, b.w) && same(o.h, b.h) && same(o.d, b.d) &&
-        same(o.ry ?? 0, b.ry ?? 0) && (b.ramp ? o.ramp === FLIP[b.ramp] : !o.ramp)
+        sameTurn(o, b) && (b.ramp ? o.ramp === FLIP[b.ramp] : !o.ramp)
     );
     if (!twin) errors.push(`box at ${b.x},${b.z} has no symmetric twin`);
   }
