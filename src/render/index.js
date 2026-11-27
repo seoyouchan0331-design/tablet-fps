@@ -210,7 +210,7 @@ export class RenderSystem {
     // while the sights are actually up, so it costs nothing in hipfire.
     this.dof = this.qLevel >= 1 ? new DepthOfField() : null;
     this.bloom = q.bloom ? new Bloom(this.qLevel >= 2 ? 6 : 5) : null;
-    this.exposure = new AutoExposure();
+    this.exposure = new AutoExposure(renderer);
     // Headroom for a physically-scaled sky (sunlit scenes reach ~5000 cd/m2).
     // The lower limit is the night exposure lock: a moonlit street meters at
     // EV100 -5.2, and letting the meter chase that turns night into an overcast

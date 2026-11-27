@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { linearFloatType } from '../core/gpu.js';
 import { COMMON } from './glsl.js';
 import { Pass, hdrTarget } from './pass.js';
 
@@ -122,7 +123,7 @@ void main() {
 `;
 
 export class AutoExposure {
-  constructor() {
+  constructor(renderer) {
     this.logPass = new Pass('ow-loglum', LOGLUM, {
       tSrc: { value: null },
       tDepth: { value: null },
@@ -141,7 +142,7 @@ export class AutoExposure {
       uLimits: { value: new THREE.Vector4(-4, 16, 1, 1.0) },
     });
 
-    const o = { type: THREE.FloatType, format: THREE.RGBAFormat, name: 'exposure' };
+    const o = { type: linearFloatType(renderer), format: THREE.RGBAFormat, name: 'exposure' };
     this.rt64 = hdrTarget(64, 64, o);
     this.rt16 = hdrTarget(16, 16, o);
     this.rt4 = hdrTarget(4, 4, o);

@@ -97,5 +97,6 @@ export function hdrTarget(w, h, opts = {}) {
 
 /** Float32 target — used for the transmittance LUT, where banding shows. */
 export function floatTarget(w, h, opts = {}) {
+  // opts.type may downgrade to half float on GPUs without float linear filtering.
   return hdrTarget(w, h, { type: THREE.FloatType, ...opts });
 }
