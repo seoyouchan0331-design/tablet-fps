@@ -208,6 +208,14 @@ if (Math.abs(mv2.y) > 0.01 || Math.abs(mv2.x) > 0.01) fail('movement stuck after
 const menuOpen = await page.evaluate(() => window.__ENGINE__.ctx.peek('ui').menu.open);
 if (menuOpen) fail('pause menu opened by itself');
 
+// the 3D view and the HUD must share one centre, or shots land off the crosshair
+const centres = await page.evaluate(() => {
+  const c = document.getElementById('game').getBoundingClientRect();
+  return { canvas: [c.left + c.width / 2, c.top + c.height / 2], view: [innerWidth / 2, innerHeight / 2] };
+});
+if (Math.abs(centres.canvas[0] - centres.view[0]) > 1 || Math.abs(centres.canvas[1] - centres.view[1]) > 1)
+  fail(`3D centre ${centres.canvas} != screen centre ${centres.view}`);
+
 if (errors.length) fail('page errors:\n' + errors.join('\n'));
 console.log(process.exitCode ? 'SMOKE FAILED' : 'SMOKE OK', '→', OUT);
 await browser.close();

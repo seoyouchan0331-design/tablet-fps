@@ -29,10 +29,11 @@ test('shotgun kills up close with most pellets, not with one', () => {
   assert.ok(s.damage * 2 < MAX_HP / 2, 'a stray pellet is a scratch');
 });
 
-test('sniper: headshot kills, body shot does not', () => {
+test('sniper: any hit kills, at any range in the arena', () => {
   const s = WEAPON_DEFS.sniper;
   assert.equal(applyDamage(MAX_HP, s.damage, 'head').killed, true);
-  assert.equal(applyDamage(MAX_HP, s.damage, 'body').killed, false);
+  assert.equal(applyDamage(MAX_HP, s.damage, 'body').killed, true);
+  assert.equal(s.dropoff, 1, 'range falloff would leave a body shot 0.01 hp short');
   assert.ok(s.scopeFov < 0.4, 'sniper zooms far more than the rifle');
   assert.ok(60 / s.rpm >= 1, 'bolt action: at most one shot a second');
 });

@@ -51,7 +51,7 @@ const aimAt = (dy) => p.evaluate((dy) => {
 }, dy);
 const reset = () => p.evaluate(() => { const pr = window.__ENGINE__.ctx.peek('practice'); pr.dummy.hp = 100; pr.avatar.setAlive(true); window.__hits = []; window.__shots = 0; });
 
-for (const [id, part, dy, scope] of [['rifle', 'body', 1.0, true], ['sniper', 'body', 1.0, true], ['sniper', 'head', 1.62, true], ['sniper', 'neck', 1.42, true]]) {
+for (const [id, part, dy, scope] of [['rifle', 'body', 1.0, true], ['sniper', 'body', 1.0, true], ['sniper', 'head', 1.62, true], ['sniper', 'chest', 1.35, true]]) {
   await p.evaluate((id) => window.__ENGINE__.ctx.events.emit('loadout:set', { primary: id }), id);
   await p.waitForFunction(() => window.__ENGINE__.ctx.peek('weapons').canFire(), null, { timeout: 30000 });
   // single shots only: one bullet, one verdict
@@ -69,6 +69,7 @@ for (const [id, part, dy, scope] of [['rifle', 'body', 1.0, true], ['sniper', 'b
   if (r.shots !== 1) fail(`${id}: ${r.shots} shots fired`);
   if (r.hits.length !== r.shots) fail(`${id} at ${part}: ${r.hits.length} hits from ${r.shots} bullets`);
   if (part === 'head' && !r.hits[0]?.head) fail('scoped sniper at the head was not a headshot');
+  if (id === 'sniper' && part === 'body' && !(r.hits[0]?.amt >= 100)) fail(`sniper body shot did ${r.hits[0]?.amt} — must kill`);
   await p.waitForTimeout(300);
 }
 await b.close();

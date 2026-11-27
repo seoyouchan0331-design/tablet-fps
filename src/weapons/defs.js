@@ -317,7 +317,12 @@ WEAPON_DEFS.shotgun = {
   drawTime: 0.6,
 };
 
-/** Bolt-action sniper: headshot kills, body shot leaves 10 hp; zooms 3.3x. */
+/**
+ * Bolt-action sniper: any hit kills (100 body / 200 head); zooms 3.3x. The
+ * price is everything else: 0.3 s to raise the scope, half speed while
+ * scoped, 1.25 s between shots, a wild no-scope, and a tracer that gives
+ * the shooter away.
+ */
 WEAPON_DEFS.sniper = {
   ...RIFLE,
   id: 'sniper',
@@ -331,9 +336,9 @@ WEAPON_DEFS.sniper = {
   magSize: 5,
   reserve: 25,
   muzzleVelocity: 950,
-  damage: 90,
+  damage: 100,
   penetration: 1.4,
-  dropoff: 0.95,
+  dropoff: 1, // no falloff: 99.99 at 30 m would leave the target alive on 0.01 hp
   maxRange: 420,
   dragK: 0.1,
   tracerEvery: 1,
