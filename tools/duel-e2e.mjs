@@ -1,0 +1,121 @@
+/**
+ * Two-player duel, end to end, in one browser: page A creates a room, page B
+ * joins it, both ready up, A shoots B, rounds/score/side-swap/results/rematch
+ * and disconnect are checked. Uses `?net=bc` (BroadcastChannel) so it needs no
+ * internet; the PeerJS path is the same MatchSystem over a different transport.
+ *
+ *   CHROME_PATH=/opt/pw-browsers/chromium node tools/duel-e2e.mjs [--port=4173]
+ */
+import { chromium, devices } from 'playwright';
+
+const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')));
+const PORT = Number(args.port ?? 4173);
+const URL = `http://127.0.0.1:${PORT}/?net=bc`;
+let failed = false;
+const fail = (m) => { console.error('FAIL', m); failed = true; };
+const step = (m) => console.log('·', m);
+
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const ctx = await browser.newContext({ ...devices['iPad Pro 11 landscape'] });
+const errors = [];
+const open = async (name) => {
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => errors.push(`${name}: ${String(e).slice(0, 300)}`));
+  await p.goto(URL, { waitUntil: 'commit' });
+  return p;
+};
+const [A, B] = await Promise.all([open('A'), open('B')]);
+const ready = (p) => p.waitForFunction(() => window.__READY__ === true, null, { timeout: 900000, polling: 2000 });
+await Promise.all([ready(A), ready(B)]);
+step('both booted');
+
+const click = (p, act) => p.evaluate((a) => document.querySelector(`[data-act="${a}"]`)?.click(), act);
+const waitAct = (p, act, timeout = 60000) => p.waitForSelector(`[data-act="${act}"]`, { timeout });
+const match = (p, fn, arg) => p.evaluate(fn, arg);
+const waitMatch = (p, pred, timeout = 120000) => p.waitForFunction(pred, null, { timeout, polling: 250 });
+
+// ---- create / join ---------------------------------------------------------
+await waitAct(A, 'create'); await click(A, 'create');
+await waitAct(A, 'room-code');
+const code = await A.evaluate(() => document.querySelector('[data-act="room-code"]').textContent.trim());
+step(`room ${code}`);
+if (!/^[A-HJ-NP-Z2-9]{4}$/.test(code)) fail(`bad room code ${code}`);
+await waitAct(B, 'join'); await click(B, 'join');
+await waitAct(B, 'code');
+await B.fill('[data-act="code"]', code.toLowerCase());
+await click(B, 'join-go');
+await Promise.all([waitAct(A, 'ready'), waitAct(B, 'ready')]);
+step('both in lobby');
+
+// host setting propagates to the guest
+await click(A, 'rounds-3');
+await waitMatch(B, () => window.__ENGINE__.ctx.peek('match').settings.winTarget === 3, 15000).catch(() => fail('guest did not receive host settings'));
+
+await click(A, 'primary-smg');
+await click(A, 'ready');
+await click(B, 'ready');
+await Promise.all([
+  waitMatch(A, () => window.__ENGINE__.ctx.peek('match').live === true),
+  waitMatch(B, () => window.__ENGINE__.ctx.peek('match').live === true),
+]);
+step('round 1 live on both');
+const roles = await Promise.all([A, B].map((p) => match(p, () => window.__ENGINE__.ctx.peek('match').role)));
+if (roles[0] !== 'host' || roles[1] !== 'guest') fail(`roles ${roles}`);
+
+// ---- A shoots B --------------------------------------------------------------
+await B.evaluate(() => { const pl = window.__ENGINE__.ctx.peek('player'); pl.movement.teleport(3, 0.03, -3); });
+await A.evaluate(() => { const pl = window.__ENGINE__.ctx.peek('player'); pl.movement.teleport(3, 0.03, 3); });
+await A.waitForFunction(() => { const o = window.__ENGINE__.ctx.peek('opponent'); return o.avatar.alive && Math.abs(o.avatar.position.z + 3) < 0.3; }, null, { timeout: 30000 })
+  .catch(() => fail('A never saw B at its new position (state sync)'));
+const aim = () => A.evaluate(() => {
+  const e = window.__ENGINE__; const pl = e.ctx.peek('player'); const a = e.ctx.peek('opponent').avatar.position;
+  const eye = pl.eyePosition; const dx = a.x - eye.x, dy = a.y + 1.1 - eye.y, dz = a.z - eye.z;
+  pl.movement.yaw = Math.atan2(-dx, -dz); pl.movement.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+});
+const cdp = await ctx.newCDPSession(A);
+const fire = await A.locator('.ow-touch .fire').boundingBox();
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fire.x + fire.width / 2, y: fire.y + fire.height / 2, id: 1 }] });
+let hurt = false;
+for (let i = 0; i < 400; i++) {
+  await aim();
+  const s = await B.evaluate(() => { const e = window.__ENGINE__; return { hp: e.ctx.peek('match').hp.guest, health: e.ctx.peek('player').health.value, score: e.ctx.peek('match').score }; });
+  if (s.hp < 100 && !hurt) { hurt = true; step(`B hit: hp ${s.hp}, B's own health ${s.health.toFixed(0)}`); if (s.health >= 100) fail('victim HUD health did not drop'); }
+  if (s.score.host >= 1) break;
+  await A.waitForTimeout(50);
+}
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+if (!hurt) fail('no hit on B was accepted by the host');
+const sc = await Promise.all([A, B].map((p) => match(p, () => window.__ENGINE__.ctx.peek('match').score)));
+step(`score after kill A=${JSON.stringify(sc[0])} B=${JSON.stringify(sc[1])}`);
+if (sc[0].host !== 1 || sc[1].host !== 1) fail('round win not recorded on both sides');
+
+// ---- round 2: sides swapped ---------------------------------------------------
+await waitMatch(A, () => { const m = window.__ENGINE__.ctx.peek('match'); return m.live && m.score.host === 1; });
+const zA = await A.evaluate(() => window.__ENGINE__.ctx.peek('player').position.z);
+step(`round 2 live, host spawn z=${zA.toFixed(1)}`);
+if (!(zA < -6)) fail('host did not swap to the far spawn in round 2');
+
+// ---- fast-forward to match end, then rematch ---------------------------------
+await A.evaluate(() => { const m = window.__ENGINE__.ctx.peek('match'); m.mode.score.host = 2; m._broadcastRound(m.mode.kill('guest')); });
+await Promise.all([waitAct(A, 'result'), waitAct(B, 'result')]);
+const res = await Promise.all([A, B].map((p) => p.evaluate(() => document.querySelector('[data-act="result"]').textContent)));
+step(`results A="${res[0]}" B="${res[1]}"`);
+if (res[0] !== 'YOU WIN' || res[1] !== 'YOU LOSE') fail('wrong results');
+await click(A, 'rematch');
+await A.waitForTimeout(1500);
+if ((await match(A, () => window.__ENGINE__.ctx.peek('match').phase)) !== 'results') fail('rematch started with only one player ready');
+await click(B, 'rematch');
+await waitMatch(A, () => window.__ENGINE__.ctx.peek('match').phase === 'match', 30000).catch(() => fail('rematch did not start'));
+step('rematch started');
+
+// ---- disconnect ----------------------------------------------------------------
+const t0 = Date.now();
+await B.close();
+await waitMatch(A, () => window.__ENGINE__.ctx.peek('match').phase === 'menu', 15000).catch(() => fail('A did not return to menu after B left'));
+step(`A back at menu ${((Date.now() - t0) / 1000).toFixed(1)} s after B left`);
+if (Date.now() - t0 > 5000) fail('disconnect took longer than 5 s to notice');
+
+if (errors.length) fail('page errors:\n' + errors.join('\n'));
+console.log(failed ? 'DUEL FAILED' : 'DUEL OK');
+await browser.close();
+process.exitCode = failed ? 1 : 0;
