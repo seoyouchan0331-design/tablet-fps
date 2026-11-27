@@ -706,7 +706,17 @@ export class PhysicsSystem {
    * Returns an array of impact records (reused; copy what you keep).
    */
   fireBullet(opts) {
-    const n = this.ballistics.fire({ rng: this.rng, ...opts });
+    // One bullet damages a given actor once, even when it passes through
+    // several of its colliders (body then head, or in one side and out).
+    this._bulletActors = this._bulletActors ?? new Set();
+    this._bulletActors.clear();
+    this._inBullet = true;
+    let n;
+    try {
+      n = this.ballistics.fire({ rng: this.rng, ...opts });
+    } finally {
+      this._inBullet = false;
+    }
     const res = this._impactResult;
     res.length = 0;
     for (let i = 0; i < n; i++) res.push(this.ballistics.impacts[i]);
@@ -730,6 +740,10 @@ export class PhysicsSystem {
     this.ctx.events.emit('bullet:impact', p);
 
     if (p.actor && !exit) {
+      if (this._inBullet) {
+        if (this._bulletActors.has(p.actor)) return;
+        this._bulletActors.add(p.actor);
+      }
       this.ctx.events.emit('damage:dealt', {
         target: p.actor,
         amount: damage * (hit?.collider?.damageScale ?? 1),

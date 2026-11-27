@@ -87,14 +87,15 @@ export class ProjectileSim {
     this.live.push(p);
     this.stats.fired++;
 
-    if (o.tracer) this._emitTracer(p, o.speed ?? 800);
+    if (o.tracer) this._emitTracer(p, o.speed ?? 800, o.tracerFrom);
     return p;
   }
 
   /** One tracer per burst of rounds: muzzle to wherever the round will land. */
-  _emitTracer(p, speed) {
+  /** `from`: where the streak starts on screen (the muzzle); the round itself flies from p.pos. */
+  _emitTracer(p, speed, from) {
     const phys = this.physics;
-    this._tracerFrom.copy(p.pos);
+    this._tracerFrom.copy(from ?? p.pos);
     let dist = Math.min(p.maxRange, 260);
     if (phys) {
       const hit = phys.raycast(p.pos, p.dir, dist, phys.MASK?.BULLET);

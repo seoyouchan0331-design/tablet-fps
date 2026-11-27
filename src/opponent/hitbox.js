@@ -7,7 +7,9 @@
  */
 export const HITBOX_BASE = {
   head: { radius: 0.13, y: 1.62 },
-  body: { radius: 0.24, y0: 0.35, y1: 1.38 },
+  // y1 is the top of the capsule's straight part; with the rounded cap the
+  // body ends at y1 + radius*1.15 = 1.47 m, exactly where the head starts.
+  body: { radius: 0.24, y0: 0.35, y1: 1.19 },
 };
 
 const S = 1.15;
@@ -31,7 +33,7 @@ export function applyDamage(hp, base, part) {
 }
 
 /** Crouched heights (metres above the feet); the player's crouch eye is ~1.02 m. */
-export const HITBOX_CROUCH = { headY: 1.06, bodyY1: 0.84 };
+export const HITBOX_CROUCH = { headY: 1.06, bodyY1: 0.63 };
 
 /**
  * Hitbox heights for a crouch amount k (0 standing .. 1 fully crouched).
@@ -39,9 +41,10 @@ export const HITBOX_CROUCH = { headY: 1.06, bodyY1: 0.84 };
  */
 export function hitboxAt(k) {
   const t = Math.min(1, Math.max(0, k));
-  return {
-    headY: HITBOX.head.y + (HITBOX_CROUCH.headY - HITBOX.head.y) * t,
-    bodyY0: HITBOX.body.y0,
-    bodyY1: HITBOX.body.y1 + (HITBOX_CROUCH.bodyY1 - HITBOX.body.y1) * t,
-  };
+  const headY = HITBOX.head.y + (HITBOX_CROUCH.headY - HITBOX.head.y) * t;
+  const y1 = HITBOX.body.y1 + (HITBOX_CROUCH.bodyY1 - HITBOX.body.y1) * t;
+  // The body capsule's rounded top must stop where the head sphere starts:
+  // overlapping, a shot at the head met the body first and scored a body hit.
+  const bodyTop = headY - HITBOX.head.radius;
+  return { headY, bodyY0: HITBOX.body.y0, bodyY1: Math.min(y1, bodyTop - HITBOX.body.radius) };
 }

@@ -91,6 +91,7 @@ export class WeaponSystem {
     this._dir = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._aim = new THREE.Vector3();
+    this._eye = new THREE.Vector3();
     this._up = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
     this._camDir = new THREE.Vector3();
@@ -413,10 +414,16 @@ export class WeaponSystem {
     }
 
     // ---- projectile(s) ----
+    // The round flies from the EYE along the crosshair, as in any modern
+    // shooter: from the muzzle (below and right of the eye) it ran parallel
+    // to the aim line and passed ~10 cm under a head you were aiming at. The
+    // tracer still starts at the muzzle so it looks like it leaves the gun.
     this.viewmodel.muzzleWorld(this._muzzle);
+    cam.getWorldPosition(this._eye);
     const seed = this.rng.u32();
     const round = {
-      origin: this._muzzle,
+      origin: this._eye,
+      tracerFrom: this._muzzle,
       dir: this._dir,
       speed: def.muzzleVelocity,
       damage: def.damage,
@@ -644,6 +651,9 @@ export class WeaponSystem {
     // ---- spread recovery -------------------------------------------------
     const rest = this._restSpread(def, player, st);
     this._spread = Math.max(rest, this._spread - def.spreadDecay * dt * (1 + this.adsProgress));
+    // A fully raised scope is dead accurate at once: no waiting for the hip
+    // spread to bleed off after scoping in.
+    if (def.scopeFov && this.adsProgress > 0.9) this._spread = def.spreadAds;
     if (this._sinceShot > 0.6) this._shotIndex = 0;
 
     // ---- gather state ----------------------------------------------------

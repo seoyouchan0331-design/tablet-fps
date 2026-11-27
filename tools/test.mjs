@@ -16,12 +16,14 @@ const SUITES = {
   duel: 'tools/duel-e2e.mjs',
   stall: 'tools/stall-probe.mjs',
   weapons: 'tools/weapons-e2e.mjs',
+  hitreg: 'tools/hitreg-e2e.mjs',
 };
 
 /** Which suites a changed path needs. */
 const RULES = [
   [/^src\/(match|net|opponent)\//, ['duel', 'stall']],
   [/^src\/(weapons|audio)\/|^src\/ui\/(scope|loadout|lobby)\.js|^public\/sfx\//, ['weapons']],
+  [/^src\/(weapons|physics|opponent|practice)\//, ['hitreg']],
   [/^src\/(ui|core\/(input|settings))/, ['controls', 'smoke']],
   [/^src\/(render|player|physics|world|fx)\//, ['smoke', 'stall']],
   [/^src\/main\.js|^index\.html|^vite\.config/, ['smoke']],

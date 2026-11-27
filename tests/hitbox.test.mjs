@@ -43,3 +43,13 @@ test('crouched hitboxes are lower; k interpolates between standing and crouched'
   const half = hitboxAt(0.5);
   assert.ok(half.headY < stand.headY && half.headY > crouch.headY);
 });
+
+test('body capsule never overlaps the head sphere (standing or crouched)', () => {
+  for (const k of [0, 0.5, 1]) {
+    const h = hitboxAt(k);
+    const bodyTop = h.bodyY1 + HITBOX.body.radius;
+    const headBottom = h.headY - HITBOX.head.radius;
+    assert.ok(bodyTop <= headBottom + 1e-9, `k=${k}: body top ${bodyTop.toFixed(3)} > head bottom ${headBottom.toFixed(3)}`);
+    assert.ok(h.bodyY1 > h.bodyY0, 'body still has a torso');
+  }
+});
