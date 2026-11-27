@@ -171,7 +171,13 @@ const aimAtDummy = () => page.evaluate(() => {
 });
 await aimAtDummy();
 await frames(3);
-const aa = await page.evaluate(() => { const pl = window.__ENGINE__.ctx.peek('player'); const r = pl._aimAssist(1 / 60); return { ...r, level: window.__ENGINE__.ctx.config.aimAssist }; });
+// aim and measure in the same tick: the dummy keeps strafing between frames
+const aa = await page.evaluate(() => {
+  const e = window.__ENGINE__; const pl = e.ctx.peek('player'); const a = e.ctx.peek('practice').avatar.position;
+  const eye = pl.eyePosition; const dx = a.x - eye.x, dy = a.y + 1.1 - eye.y, dz = a.z - eye.z;
+  pl.movement.yaw = Math.atan2(-dx, -dz); pl.movement.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+  const r = pl._aimAssist(1 / 60); return { ...r, level: e.ctx.config.aimAssist };
+});
 console.log('aim assist on target', JSON.stringify(aa));
 if (aa.level === 'low' && aa.lookScale !== 0.75) fail('aim assist did not slow look on a visible target');
 // The earlier fire test emptied the magazine: reload and wait for rounds.

@@ -31,6 +31,14 @@ const CROUCH_SQUASH = HITBOX_CROUCH.headY / HITBOX.head.y;
 const FADE = 0.15; // s crossfade between clips
 const CORPSE_S = 2.5; // how long the death pose stays visible
 const GUN_SCALE = 1.8;
+/**
+ * The model's cartoon head was 1.17 m wide — four times the 0.3 m head hitbox,
+ * so most shots at the visible head passed through nothing. It is drawn at
+ * half size, and the hitboxes are fitted to the drawn head and body every
+ * frame (see _fitHitboxes), so what you see is what you can hit.
+ */
+const HEAD_SCALE = 0.5;
+const BODY_R = 0.3; // torso is ~0.7 m wide, ~0.62 m deep
 
 let _modelPromise = null;
 
@@ -111,6 +119,7 @@ export class Avatar {
     });
     this.root.add(model);
     this.bodyNode = model;
+    this._fitRobotHead(model);
     this._baseScaleY = model.scale.y;
     this.mixer = new THREE.AnimationMixer(model);
     this.actions = {};
@@ -123,6 +132,59 @@ export class Avatar {
       this.actions[clip.name] = a;
     }
     this._play('Idle', 1);
+  }
+
+  /** Shrink the head and measure it (in the Head bone's frame) for the hitbox. */
+  _fitRobotHead(model) {
+    const bone = model.getObjectByName('Head');
+    if (!bone) return;
+    bone.scale.setScalar(HEAD_SCALE); // no clip animates scale, so this holds
+    this.root.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const lo = new THREE.Vector3(Infinity, Infinity, Infinity);
+    const hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    const inv = new THREE.Matrix4().copy(bone.matrixWorld).invert();
+    bone.traverse((o) => {
+      if (!o.isMesh || o.isSkinnedMesh) return;
+      const pos = o.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+        lo.min(v);
+        hi.max(v);
+      }
+    });
+    if (!Number.isFinite(lo.x)) return;
+    this._headBone = bone;
+    this._headLocal = lo.clone().add(hi).multiplyScalar(0.5);
+    // world-space size of the drawn head (the bone frame carries the scales)
+    const w = new THREE.Vector3();
+    bone.getWorldScale(w);
+    const size = hi.clone().sub(lo).multiply(w);
+    // radius: mostly the head's height, a little of its depth, so a side view
+    // of the dome is covered too without growing far past the top
+    this._headR = 0.7 * (size.y / 2) + 0.3 * (size.z / 2);
+    this._headHalfW = Math.max(this._headR, size.x / 2); // a little wider than tall
+  }
+
+  /**
+   * Hitboxes on the drawn robot: the head as a side-to-side capsule around
+   * the head bone (so it follows the run bob, crouch and lean), the body as
+   * an upright capsule from the hips to just under the head.
+   */
+  _fitHitboxes() {
+    const b = this._headBone;
+    if (!b) return false;
+    const c = b.localToWorld((this._v2 ??= new THREE.Vector3()).copy(this._headLocal));
+    const r = this._headR;
+    const half = Math.max(0, this._headHalfW - r);
+    const yaw = this.root.rotation.y;
+    const rx = Math.cos(yaw) * half, rz = -Math.sin(yaw) * half; // avatar's right axis
+    this.head.setSegment(c.x - rx, c.y, c.z - rz, c.x + rx, c.y, c.z + rz, r);
+    const p = this.position;
+    const top = Math.max(p.y + HITBOX.body.y0 + 0.1, c.y - r - BODY_R);
+    this.body.setSegment(p.x, p.y + HITBOX.body.y0, p.z, p.x, top, p.z, BODY_R);
+    this.headY = c.y - p.y;
+    return true;
   }
 
   _buildMannequin(opts) {
@@ -195,6 +257,10 @@ export class Avatar {
     this._play(pick.clip, pick.timeScale);
     this.mixer.update(dt);
     this._holdGun(dt);
+    if (this._headBone) {
+      this.root.updateMatrixWorld(true);
+      this._fitHitboxes();
+    }
   }
 
   /* ---------------------------------------------------------------- gun -- */
@@ -369,6 +435,10 @@ export class Avatar {
     this.position.set(x, y, z);
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw;
+    if (this._headBone) {
+      this.root.updateMatrixWorld(true);
+      if (this._fitHitboxes()) return;
+    }
     const hb = hitboxAt(this._crouch);
     this.headY = hb.headY;
     const hy = y + hb.headY;

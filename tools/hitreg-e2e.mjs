@@ -44,14 +44,31 @@ await p.evaluate(() => {
   e.events.on('weapon:fire', (ev) => { if (!ev.remote) window.__shots++; });
 });
 if (!(await p.evaluate(() => window.__clear))) fail('no clear line to the dummy from any test spot');
-const aimAt = (dy) => p.evaluate((dy) => {
+// dy: metres above the feet, or 'head' for the drawn head's centre (+ 'up' m);
+// side: metres to the target's left/right as seen by the shooter
+const aimAt = (dy, side = 0) => p.evaluate(({ dy, side }) => {
   const e = window.__ENGINE__.ctx; const pl = e.peek('player'); const a = e.peek('practice').avatar;
-  const eye = pl.eyePosition; const dx = a.position.x - eye.x, h = a.position.y + dy - eye.y, dz = a.position.z - eye.z;
+  const y = typeof dy === 'number' ? dy : a.headY + (dy.up ?? 0);
+  const eye = pl.eyePosition;
+  const fx = a.position.x - eye.x, fz = a.position.z - eye.z; const L = Math.hypot(fx, fz);
+  const tx = a.position.x + (-fz / L) * side, tz = a.position.z + (fx / L) * side; // shooter's right
+  const dx = tx - eye.x, h = a.position.y + y - eye.y, dz = tz - eye.z;
   pl.movement.yaw = Math.atan2(-dx, -dz); pl.movement.pitch = Math.atan2(h, Math.hypot(dx, dz));
-}, dy);
+}, { dy, side });
 const reset = () => p.evaluate(() => { const pr = window.__ENGINE__.ctx.peek('practice'); pr.dummy.hp = 100; pr.avatar.setAlive(true); window.__hits = []; window.__shots = 0; });
 
-for (const [id, part, dy, scope] of [['rifle', 'body', 1.0, true], ['sniper', 'body', 1.0, true], ['sniper', 'head', 1.62, true], ['sniper', 'chest', 1.35, true]]) {
+const HEAD = { up: 0 };
+for (const [id, part, dy, scope, side = 0] of [
+  ['rifle', 'body', 1.0, true],
+  ['sniper', 'body', 1.0, true],
+  ['sniper', 'head', HEAD, true],
+  ['sniper', 'chest', 1.1, true],
+  // the drawn head is ~0.62 m wide: its left and right edges count as the head
+  ['sniper', 'head', HEAD, true, 0.24],
+  ['sniper', 'head', HEAD, true, -0.24],
+  // 15 cm above the drawn head is air
+  ['sniper', 'miss', { up: 0.36 }, true],
+]) {
   await p.evaluate((id) => window.__ENGINE__.ctx.events.emit('loadout:set', { primary: id }), id);
   await p.waitForFunction(() => window.__ENGINE__.ctx.peek('weapons').canFire(), null, { timeout: 30000 });
   // single shots only: one bullet, one verdict
@@ -60,13 +77,18 @@ for (const [id, part, dy, scope] of [['rifle', 'body', 1.0, true], ['sniper', 'b
   // let the previous shot's camera recoil settle (it moves the real aim line)
   await p.waitForFunction(() => { const r = window.__ENGINE__.ctx.peek('player').rig.recoilPitch; return Math.abs(r.spring.value + r.residual) < 0.002; }, null, { timeout: 20000 });
   await reset();
-  for (let i = 0; i < 3; i++) { await aimAt(dy); await frames(1); }
+  for (let i = 0; i < 3; i++) { await aimAt(dy, side); await frames(1); }
   await p.keyboard.down('KeyF'); await frames(1); await p.keyboard.up('KeyF');
   for (let i = 0; i < 10; i++) await frames(1);
   if (scope) await p.keyboard.up('KeyE');
   const r = await p.evaluate(() => ({ shots: window.__shots, hits: window.__hits }));
-  console.log(`${id} at ${part}: ${JSON.stringify(r)}`);
+  console.log(`${id} at ${part}${side ? ` (${side > 0 ? 'right' : 'left'} edge)` : ''}: ${JSON.stringify(r)}`);
   if (r.shots !== 1) fail(`${id}: ${r.shots} shots fired`);
+  if (part === 'miss') {
+    if (r.hits.length) fail(`shot over the head hit ${JSON.stringify(r.hits)}`);
+    await p.waitForTimeout(300);
+    continue;
+  }
   if (r.hits.length !== r.shots) fail(`${id} at ${part}: ${r.hits.length} hits from ${r.shots} bullets`);
   if (part === 'head' && !r.hits[0]?.head) fail('scoped sniper at the head was not a headshot');
   if (id === 'sniper' && part === 'body' && !(r.hits[0]?.amt >= 100)) fail(`sniper body shot did ${r.hits[0]?.amt} — must kill`);
