@@ -124,6 +124,8 @@ export const DEFAULTS = {
   /** Adjust renderScale at runtime to hold the frame-rate target. */
   dynamicResolution: false,
   touchSensitivity: 0.0045,
+  /** Touch aim assist: 'off' | 'low' | 'medium'. */
+  aimAssist: 'low',
 };
 
 /**

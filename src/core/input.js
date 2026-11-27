@@ -52,6 +52,8 @@ export class Input {
     this.touch = !!config.touch;
     this.touchState = new TouchState();
     this._touchSprint = false;
+    /** This frame's touch look, already in radians (subset of `look`). */
+    this.touchLook = { x: 0, y: 0 };
     this._adsToggled = false;
 
     this.gamepadIndex = null;
@@ -201,10 +203,13 @@ export class Input {
   _applyTouch() {
     const ts = this.touchState;
     const d = ts.consume();
+    this.touchLook.x = this.touchLook.y = 0;
     if (!this.frozen) {
       const k = this.config.touchSensitivity ?? 0.0045;
-      this.look.x += d.x * k;
-      this.look.y += d.y * k * (this.config.invertY ? -1 : 1);
+      this.touchLook.x = d.x * k;
+      this.touchLook.y = d.y * k * (this.config.invertY ? -1 : 1);
+      this.look.x += this.touchLook.x;
+      this.look.y += this.touchLook.y;
     }
     // Same path as the gamepad left stick (moveY is screen-down positive).
     this.stick.moveX += ts.axis.x;

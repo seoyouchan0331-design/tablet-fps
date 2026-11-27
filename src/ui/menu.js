@@ -74,6 +74,21 @@ export class PauseMenu {
       this.invBtns.push([b, val]);
     }
 
+    // ---- aim assist (touch) ---------------------------------------------
+    const aaRow = this._row('Aim Assist');
+    const aaSeg = el('div', 'ow-seg', aaRow);
+    this.aaBtns = [];
+    for (const val of ['off', 'low', 'medium']) {
+      const b = el('button', null, aaSeg, val);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        this.ctx.config.aimAssist = val;
+        this.ctx.events.emit('ui:setting', { key: 'aimAssist', value: val });
+        this.syncFromConfig();
+      });
+      this.aaBtns.push([b, val]);
+    }
+
     // ---- buttons ---------------------------------------------------------
     const btns = el('div', 'ow-btns', inner);
     this.resumeBtn = el('button', 'ow-btn primary', btns, 'Resume');
@@ -155,6 +170,7 @@ export class PauseMenu {
     for (let i = 0; i < this.qBtns.length; i++)
       this.qBtns[i].classList.toggle('on', PRESETS[i] === cfg.quality);
     for (const [b, v] of this.invBtns) b.classList.toggle('on', !!cfg.invertY === v);
+    for (const [b, v] of this.aaBtns) b.classList.toggle('on', (cfg.aimAssist ?? 'off') === v);
     this.sens?.set((cfg.sensitivity ?? 0.0022) / 0.0022);
     this.fov?.set(cfg.fov ?? 80);
   }

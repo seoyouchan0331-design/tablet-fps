@@ -85,6 +85,7 @@ import { Health } from './health.js';
 import { LowHealthPass } from './lowhealth.js';
 import { STANCE, MOVE, CAMERA, HEALTH, FOOTSTEP, JUMP_SPEED } from './tuning.js';
 import { clamp, clamp01, lerp, approach, DEG } from './springs.js';
+import { aimAssist } from './aimassist.js';
 
 export class PlayerSystem {
   static id = 'player';
@@ -220,6 +221,48 @@ export class PlayerSystem {
    * zero latency) and in update() otherwise — above 120 fps a frame can contain
    * no fixed step at all and dropping the delta there would feel like a hitch.
    */
+  /** Angle from the crosshair to the duel target, its angular velocity, and LOS. */
+  _aimAssist(dt) {
+    const out = this._aa ?? (this._aa = { lookScale: 1, trackYaw: 0, trackPitch: 0 });
+    const st = this._aaState ?? (this._aaState = {
+      err: { yaw: 0, pitch: 0 }, vel: { yaw: 0, pitch: 0 }, prevYaw: 0, prevPitch: 0, has: false,
+      target: new THREE.Vector3(),
+    });
+    const avatar = this.ctx.peek('opponent')?.avatar ?? this.ctx.peek('practice')?.avatar;
+    const level = this.ctx.config.aimAssist ?? 'off';
+    if (!avatar?.alive || level === 'off') {
+      st.has = false;
+      return aimAssist('off', st.err, st.vel, false, out);
+    }
+    const eye = this.eyePosition;
+    const m = this.movement;
+    // Aim point: chest, or the head when the crosshair is already above the neck.
+    const t = st.target.set(avatar.position.x, avatar.position.y + 1.15, avatar.position.z);
+    let dx = t.x - eye.x, dy = t.y - eye.y, dz = t.z - eye.z;
+    let horiz = Math.hypot(dx, dz);
+    let yaw = Math.atan2(-dx, -dz);
+    let pitch = Math.atan2(dy, horiz);
+    const headPitch = Math.atan2(avatar.position.y + 1.62 - eye.y, horiz);
+    if (m.pitch > (pitch + headPitch) / 2) pitch = headPitch;
+    let ey = yaw - m.yaw;
+    ey -= Math.round(ey / (2 * Math.PI)) * 2 * Math.PI;
+    st.err.yaw = ey;
+    st.err.pitch = pitch - m.pitch;
+    if (st.has && dt > 1e-4) {
+      let vy = yaw - st.prevYaw;
+      vy -= Math.round(vy / (2 * Math.PI)) * 2 * Math.PI;
+      st.vel.yaw = vy / dt;
+      st.vel.pitch = (pitch - st.prevPitch) / dt;
+    } else {
+      st.vel.yaw = st.vel.pitch = 0;
+    }
+    st.prevYaw = yaw;
+    st.prevPitch = pitch;
+    st.has = true;
+    const visible = this.physics.lineOfSight(eye, t);
+    return aimAssist(level, st.err, st.vel, visible, out);
+  }
+
   _consumeLook(dt) {
     const frame = this.ctx.time.frame;
     if (frame === this._lookFrame) return;
@@ -235,6 +278,18 @@ export class PlayerSystem {
 
     let dYaw = -input.look.x * sens;
     let dPitch = -input.look.y * sens;
+
+    // Touch aim assist: slow the finger near a visible target and follow a
+    // fraction of its motion. Keyboard/mouse look is never touched.
+    if (input.touch) {
+      const aa = this._aimAssist(dt);
+      if (aa.lookScale !== 1) {
+        dYaw += input.touchLook.x * (1 - aa.lookScale) * sens;
+        dPitch += input.touchLook.y * (1 - aa.lookScale) * sens;
+      }
+      dYaw += aa.trackYaw * dt;
+      dPitch += aa.trackPitch * dt;
+    }
 
     // Gamepad: rate-based, already curved by Input.
     const stick = input.stick;
