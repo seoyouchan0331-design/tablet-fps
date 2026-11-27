@@ -650,8 +650,8 @@ export class PlayerSystem {
     this.movement.adsAmount = this.adsAmount;
   }
 
-  addRecoil(pitch, yaw, roll, punch) {
-    this.rig.addRecoil(pitch, yaw, roll, punch);
+  addRecoil(pitch, yaw, roll, punch, weight) {
+    this.rig.addRecoil(pitch, yaw, roll, punch, weight);
   }
   addKick(pitch, yaw, roll) {
     this.rig.addKick(pitch, yaw, roll);

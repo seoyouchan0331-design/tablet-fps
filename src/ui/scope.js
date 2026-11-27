@@ -29,6 +29,25 @@ export class ScopeOverlay {
     el('div', 'ring', this.root);
     el('div', 'gap', this.root);
     this.on = false;
+    this._kick = 0;
+  }
+
+  /** The shot jolts the scope picture up, then it settles. */
+  kick(amount = 1) {
+    this._kick = Math.min(1.5, this._kick + amount);
+  }
+
+  update(dt) {
+    if (this._kick <= 0.001) {
+      if (this._kick) {
+        this._kick = 0;
+        setStyle(this.root, 'transform', '');
+      }
+      return;
+    }
+    this._kick *= Math.exp(-dt * 7);
+    const k = this._kick;
+    setStyle(this.root, 'transform', `translateY(${(-k * 6).toFixed(2)}vmin) scale(${(1 + k * 0.05).toFixed(4)})`);
   }
 
   /** @param {boolean} on show the scope view (and hide the 3-D viewmodel) */

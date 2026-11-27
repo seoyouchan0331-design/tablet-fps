@@ -12,10 +12,21 @@
  *   own steps     from player:footstep / player:land
  *   opponent      steps synthesised from their movement (the avatar position)
  *
+ * Shots and steps are real recordings (public/sfx, CC0 — see LICENSE-sfx.md),
+ * fetched at boot and decoded once audio starts. Until they decode, or if a
+ * file fails, the synthesised versions (synth.js) play instead.
+ *
  * The public surface keeps the old method names (play, playUi, playShell, ui,
  * bark, setMasterVolume...) as harmless no-ops so callers never break.
  */
 import { SHOT_PROFILES, profileFor, synthShot, synthStep } from './synth.js';
+
+/** Recorded files per weapon id (public/sfx). */
+const SHOT_FILES = { rifle: 'rifle', smg: 'smg', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper' };
+const STEP_FILES = ['step_stone01', 'step_wood01', 'step_wood02', 'step_wood03'];
+/** Playback level per weapon, so the recordings sit together in the mix. */
+const SHOT_LEVEL = { rifle: 0.8, smg: 0.62, pistol: 0.7, shotgun: 0.95, sniper: 1.0 };
+const STEP_LEVEL = { walk: 0.35, run: 0.5, crouch: 0.16, land: 0.75 };
 
 const GESTURES = ['pointerdown', 'touchstart', 'keydown', 'mousedown'];
 const VARIANTS = 4;
@@ -39,6 +50,15 @@ export class DuelAudioSystem {
 
   async init(ctx) {
     this.ctx = ctx;
+    // Fetch the recordings now (no AudioContext needed); decode on start().
+    const base = (import.meta.env && import.meta.env.BASE_URL) || './';
+    const get = (name) =>
+      fetch(`${base}sfx/${name}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null), () => null);
+    this._raw = {
+      shots: Object.fromEntries(Object.entries(SHOT_FILES).map(([id, f]) => [id, get(f)])),
+      steps: STEP_FILES.map(get),
+    };
+    this._files = { shots: {}, steps: [] };
     this._offs = [
       ctx.events.on('weapon:fire', (e) => this._onFire(e)),
       ctx.events.on('player:footstep', (e) => this._step(e?.stance === 'crouch' ? 'crouch' : e?.running ? 'run' : 'walk', null, 1)),
@@ -82,6 +102,7 @@ export class DuelAudioSystem {
       lim.release.value = 0.12;
       this.master.connect(lim).connect(actx.destination);
       this._render(actx);
+      this._decode(actx);
       this.running = true;
       this.stats.started = true;
       console.info(`[audio] duel audio online @ ${actx.sampleRate} Hz`);
@@ -111,6 +132,22 @@ export class DuelAudioSystem {
       this._steps[k] = [];
       for (let v = 0; v < 6; v++) this._steps[k].push(buf(synthStep(k, sr, v + 1)));
     }
+  }
+
+  /** Swap in the recorded files as each one decodes. */
+  _decode(actx) {
+    const dec = (p) =>
+      p.then((ab) => (ab ? new Promise((ok) => actx.decodeAudioData(ab.slice(0), ok, () => ok(null))) : null)).catch(() => null);
+    for (const [id, p] of Object.entries(this._raw?.shots ?? {})) {
+      dec(p).then((b) => {
+        if (b) this._files.shots[id] = b;
+      });
+    }
+    (this._raw?.steps ?? []).forEach((p) =>
+      dec(p).then((b) => {
+        if (b) this._files.steps.push(b);
+      })
+    );
   }
 
   /**
@@ -155,21 +192,33 @@ export class DuelAudioSystem {
 
   _onFire(e) {
     if (!this.running || !e || e.empty) return;
-    const list = this._shots.get(profileFor(e.weapon));
-    if (!list) return;
+    const prof = profileFor(e.weapon);
+    const id = Object.keys(SHOT_PROFILES).find((k) => SHOT_PROFILES[k] === prof) ?? 'rifle';
+    const file = this._files.shots[id];
+    const list = this._shots.get(prof);
+    const buf = file ?? list?.[this._n % list.length];
+    if (!buf) return;
+    this._n++;
     this.stats.shots++;
-    const buf = list[this._n++ % list.length];
-    const rate = 0.97 + ((this._n * 0.37) % 1) * 0.06; // tiny pitch spread
-    if (e.remote) this._voice(buf, e.origin, 0.95, rate);
-    else this._voice(buf, null, 0.8, rate);
+    if (file) this.stats.fileShots = (this.stats.fileShots ?? 0) + 1;
+    const rate = 0.96 + ((this._n * 0.37) % 1) * 0.08; // small pitch spread: no machine-gun repetition
+    const level = file ? SHOT_LEVEL[id] ?? 0.8 : 0.8;
+    if (e.remote) this._voice(buf, e.origin, level * 1.15, rate);
+    else this._voice(buf, null, level, rate);
   }
 
   _step(kind, at, level) {
     if (!this.running) return;
-    const list = this._steps?.[kind];
-    if (!list) return;
+    const files = this._files.steps;
+    this._n++;
     this.stats.steps++;
-    this._voice(list[this._n++ % list.length], at, level);
+    if (files.length) {
+      const rate = (kind === 'land' ? 0.85 : 0.95) + ((this._n * 0.61) % 1) * 0.12;
+      this._voice(files[this._n % files.length], at, level * (STEP_LEVEL[kind] ?? 0.4) * 1.6, rate);
+      return;
+    }
+    const list = this._steps?.[kind];
+    if (list) this._voice(list[this._n % list.length], at, level);
   }
 
   /** Opponent footsteps from how far their avatar has moved on the ground. */

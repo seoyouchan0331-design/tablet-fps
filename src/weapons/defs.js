@@ -293,11 +293,11 @@ WEAPON_DEFS.shotgun = {
   magSize: 6,
   reserve: 36,
   pellets: 8,
-  pelletSpread: 3.8, // cone half-angle (deg) from the hip
-  pelletSpreadAds: 2.7,
+  pelletSpread: 3.0, // cone half-angle (deg) from the hip: ~26 cm at 5 m
+  pelletSpreadAds: 2.2,
   muzzleVelocity: 420,
-  damage: 14, // per pellet
-  penetration: 0.3,
+  damage: 16, // per pellet: 7 of 8 kill
+  penetration: 0, // a pellet stops in the first body it hits
   dropoff: 0.18,
   maxRange: 42,
   dragK: 0.9,
@@ -309,6 +309,7 @@ WEAPON_DEFS.shotgun = {
   spreadDecay: 3,
   recoil: { ...RIFLE.recoil, pitch: 0.034, yaw: 0.006, kickBack: 0.045, kickUp: 0.016, roll: 0.06, punch: 0.9,
     patternLength: 6, patternSeed: 0x5a17e2, climbShape: [1], drift: 0.6 },
+  shake: 0.16,
   adsTime: 0.2,
   adsFov: 0.84,
   reloadTac: 2.3,
@@ -341,8 +342,12 @@ WEAPON_DEFS.sniper = {
   spreadPerShot: 3,
   spreadMax: 7,
   spreadDecay: 6,
-  recoil: { ...RIFLE.recoil, pitch: 0.04, yaw: 0.005, kickBack: 0.05, kickUp: 0.014, roll: 0.05, punch: 0.8,
-    patternLength: 5, patternSeed: 0x7e1f03, climbShape: [1], drift: 0.4 },
+  // One heavy shot: a big, slow camera kick (~6 deg), the stock driven back
+  // into the shoulder, and a short screen shake. Settles before the bolt is
+  // cycled, so the next shot starts from a steady picture.
+  recoil: { ...RIFLE.recoil, pitch: 0.105, yaw: 0.014, kickBack: 0.11, kickUp: 0.036, roll: 0.12, punch: 1.1, weight: 2.4,
+    freq: 6.5, damping: 0.36, patternLength: 5, patternSeed: 0x7e1f03, climbShape: [1], drift: 0.4 },
+  shake: 0.32,
   adsTime: 0.3,
   adsFov: 0.8,
   scopeFov: 0.3, // world camera FOV multiplier when fully scoped

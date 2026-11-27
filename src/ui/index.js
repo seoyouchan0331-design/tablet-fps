@@ -196,6 +196,7 @@ export class UiSystem {
     on('weapon:fire', (e) => {
       if (e?.remote) return; // the duel opponent's shot, not ours
       this.crosshair.onFire(e?.recoil ?? 1);
+      if (this.scope.on) this.scope.kick(1);
       if (this.state.simulate) return;
       const w = this._weaponState();
       if (!w) this.state.ammo = Math.max(0, this.state.ammo - 1);
@@ -463,6 +464,7 @@ export class UiSystem {
     this.touch?.update(rawDt);
     const wp = ctx.peek('weapons');
     this.scope.set(!!wp?.current?.scopeFov && wp.adsProgress > 0.85 && !this.menu.open, ctx);
+    this.scope.update(rawDt);
     if (this._flashT > 0) {
       this._flashT = Math.max(0, this._flashT - rawDt);
       setStyle(this.killFlash, 'opacity', (this._flashT / KILL_FLASH_S).toFixed(2));

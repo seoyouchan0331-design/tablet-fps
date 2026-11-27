@@ -46,3 +46,11 @@ test('HitLedger allows one hit per shot, or one per pellet', () => {
   l.clear();
   assert.equal(l.take('host', 1, 1), true);
 });
+
+test('sniper kicks hard: one heavy shot', () => {
+  const s = WEAPON_DEFS.sniper, r = WEAPON_DEFS.rifle;
+  assert.ok(s.recoil.pitch >= r.recoil.pitch * 10, 'camera climb per shot');
+  assert.ok(s.recoil.punch >= 1, 'camera pushed back');
+  assert.ok(s.recoil.weight >= 2, 'slow, heavy return');
+  assert.ok(s.shake > 0.2, 'screen shake');
+});

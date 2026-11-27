@@ -116,8 +116,17 @@ export class CameraRig {
   /* impulses — the public feel API                                       */
   /* ==================================================================== */
 
-  /** Camera-owned recoil. Angles in radians; `punch` in metres. */
-  addRecoil(pitch = 0, yaw = 0, roll = 0, punch = 0) {
+  /**
+   * Camera-owned recoil. Angles in radians; `punch` in metres. `weight` > 1
+   * makes the return slower and heavier (a sniper's kick hangs, then settles);
+   * every shot sets it, so a lighter gun gets its snappy return straight back.
+   */
+  addRecoil(pitch = 0, yaw = 0, roll = 0, punch = 0, weight = 1) {
+    for (const ax of [this.recoilPitch, this.recoilYaw, this.recoilRoll]) {
+      ax._base ??= { freq: ax.spring.freq, tau: ax.residualTau };
+      ax.spring.freq = ax._base.freq / weight;
+      ax.residualTau = ax._base.tau * weight;
+    }
     this.recoilPitch.kick(pitch);
     this.recoilYaw.kick(yaw);
     this.recoilRoll.kick(roll);

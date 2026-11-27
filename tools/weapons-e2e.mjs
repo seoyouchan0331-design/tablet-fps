@@ -59,7 +59,8 @@ console.log('shotgun one pull', JSON.stringify(sg));
 await p.waitForTimeout(600);
 await p.screenshot({ path: 'shots/shotgun.png' });
 if (sg.fires !== 1) fail(`one pull fired ${sg.fires} times`);
-if (sg.hits < 3) fail(`only ${sg.hits} pellets landed at 5 m`);
+if (sg.hits < 4) fail(`only ${sg.hits} pellets landed at 5 m`);
+if (sg.hits > 8) fail(`${sg.hits} hits from 8 pellets: a pellet counted twice`);
 
 // ---- sniper: scope view ---------------------------------------------------------
 await p.evaluate(() => window.__ENGINE__.ctx.events.emit('loadout:set', { primary: 'sniper' }));
@@ -79,6 +80,19 @@ console.log('sniper scoped', JSON.stringify({ fov0, ...sc }));
 await p.screenshot({ path: 'shots/sniper-scope.png' });
 if (!(sc.fov < fov0 * 0.45)) fail('sniper did not zoom');
 if (sc.overlay !== 'block' || sc.vm) fail('scope picture not shown');
+// one scoped shot: the camera recoil right after the shot, and how slowly it returns
+const kick = await p.evaluate(() => new Promise((done) => {
+  const e = window.__ENGINE__.ctx; const rig = e.peek('player').rig;
+  const off = e.events.on('weapon:fire', () => {
+    off?.();
+    done({ peakDeg: (rig.recoilPitch.spring.value + rig.recoilPitch.residual) * 57.3, freq: rig.recoilPitch.spring.freq });
+  });
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyF' }));
+  setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyF' })), 50);
+}));
+console.log('sniper kick', JSON.stringify(kick));
+if (!(kick.freq < 5)) fail('sniper recoil returns as fast as the rifle');
+if (!(kick.peakDeg > 3)) fail(`sniper kick only ${kick.peakDeg.toFixed(2)} deg`);
 await p.keyboard.up('KeyE');
 await p.waitForTimeout(700);
 const un = await p.evaluate(() => ({ overlay: getComputedStyle(document.querySelector('.ow-scope')).display, vm: window.__ENGINE__.ctx.viewScene.visible }));
@@ -92,6 +106,7 @@ if (!au.duel) fail('old audio engine still loaded');
 if (!au.started) fail('audio did not start on a gesture');
 if (au.shots < 1) fail('no gunshot played');
 if (au.steps < 1) fail('no footstep played');
+if (!(au.fileShots > 0)) fail('recorded gunshot files did not play');
 
 await b.close();
 console.log(failed ? 'WEAPONS FAILED' : 'WEAPONS OK');

@@ -453,7 +453,8 @@ export class WeaponSystem {
     const p = this.player;
     if (p?.addRecoil) {
       // The camera climb is the learnable part; the viewmodel kick is the feel.
-      p.addRecoil(pitch, yaw, def.recoil.roll * 0.35, def.recoil.punch);
+      p.addRecoil(pitch, yaw, def.recoil.roll * 0.35, def.recoil.punch, def.recoil.weight ?? 1);
+      if (def.shake) p.addTrauma?.(def.shake); // heavy guns jolt the whole view
     }
     this._spread = Math.min(def.spreadMax, this._spread + def.spreadPerShot);
     this._fireTimer = 60 / def.rpm;
