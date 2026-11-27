@@ -75,6 +75,8 @@ export class UiSystem {
 
     const host = document.getElementById('ui') ?? document.body;
     this.root = el('div', 'ow-hud', host);
+    // Tablet build: no full-screen SVG/backdrop filters or blend modes (style.js .ow-lite).
+    if (ctx.config.q?.lite) this.root.classList.add('ow-lite');
 
     // Stacking order: hurt overlays sit under the HUD, the menu over everything.
     this.hurtLayer = el('div', 'ow-layer', this.root);

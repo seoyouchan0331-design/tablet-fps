@@ -597,6 +597,14 @@ const CSS = `
   background: linear-gradient(to right, transparent, rgba(255,255,255,.5), transparent);
 }
 
+/* Tablet (lite) build: iPad Safari repaints full-screen SVG filters,
+   backdrop filters and blend modes at hundreds of ms per frame, which froze
+   the game on every hit. Same overlays, plain gradients only. */
+.ow-lite .ow-blood-a, .ow-lite .ow-blood-b { filter: none; mix-blend-mode: normal; }
+.ow-lite .ow-desat { display: none; }
+.ow-lite .ow-hitflash { mix-blend-mode: normal; }
+.ow-lite .ow-menu { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
 /* ================================================================== menu */
 .ow-menu {
   position:absolute; inset:0; pointer-events:auto;

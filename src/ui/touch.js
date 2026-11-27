@@ -20,8 +20,7 @@ const CSS = `
   -webkit-tap-highlight-color: transparent; font-family: "Inter","Helvetica Neue",Arial,sans-serif; }
 .ow-touch .tb { position: absolute; display: flex; align-items: center; justify-content: center;
   border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(10,14,18,.28);
-  color: rgba(255,255,255,.85); font-weight: 700; letter-spacing: .08em; font-size: 12px;
-  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+  color: rgba(255,255,255,.85); font-weight: 700; letter-spacing: .08em; font-size: 12px; }
 .ow-touch .tb.on, .ow-touch .tb.held { background: rgba(255,255,255,.28); border-color: rgba(255,255,255,.8); }
 .ow-touch .fire { width: 96px; height: 96px; right: 7%; bottom: 26%; font-size: 14px;
   border-color: rgba(255,120,90,.7); }

@@ -143,15 +143,46 @@ export class LiteRenderSystem {
   setExposureBias() {}
   _cullLights() {}
 
+  /**
+   * Compile every program the game can draw before the first frame. Hidden
+   * objects (the duel opponent, effects not yet spawned) are made visible for
+   * one off-screen draw — renderer.compile() alone skips invisible objects and
+   * the shadow pass, and a program compiled mid-match freezes an iPad.
+   */
   async prewarmMaterials() {
     const r = this.renderer;
+    const { scene, camera, viewScene, viewCamera } = this.ctx;
+    const shown = [];
+    const unculled = [];
+    for (const root of [scene, viewScene]) {
+      root.traverse((o) => {
+        if (o.visible === false) {
+          o.visible = true;
+          shown.push(o);
+        }
+        if (o.isMesh && o.frustumCulled) {
+          o.frustumCulled = false;
+          unculled.push(o);
+        }
+      });
+    }
+    const rt = new THREE.WebGLRenderTarget(64, 64, { samples: 0 });
     try {
-      await r.compileAsync(this.ctx.scene, this.ctx.camera);
-      await r.compileAsync(this.ctx.viewScene, this.ctx.viewCamera);
+      await r.compileAsync(scene, camera);
+      await r.compileAsync(viewScene, viewCamera);
+      r.setRenderTarget(rt);
+      r.clear();
+      r.render(scene, camera); // also builds the shadow-pass programs
+      r.render(viewScene, viewCamera);
     } catch {
       /* programs compile on first draw instead */
+    } finally {
+      r.setRenderTarget(null);
+      rt.dispose();
+      for (const o of shown) o.visible = false;
+      for (const o of unculled) o.frustumCulled = true;
     }
-    return { ok: true };
+    return { ok: true, forced: shown.length };
   }
 
   // ---- frame ----------------------------------------------------------------
@@ -177,10 +208,13 @@ export class LiteRenderSystem {
         this._scale = this.dynres.scale;
         this.resize(this._cssW, this._cssH);
       }
-      // Last resort when even the lowest resolution can't hold 60: drop shadows.
-      if (this.dynres.starved && this.sun.castShadow) {
-        this.sun.castShadow = false;
-        console.info('[render-lite] starved at minimum scale: shadows off');
+      // Last resort when even the lowest resolution can't hold 60: stop
+      // re-rendering the shadow map. NOT castShadow = false — that changes
+      // every lit material's program key and recompiles them all mid-match
+      // (a multi-hundred-ms freeze on an iPad).
+      if (this.dynres.starved && this.sun.shadow.autoUpdate) {
+        this.sun.shadow.autoUpdate = false;
+        console.info('[render-lite] starved at minimum scale: shadow map frozen');
       }
     }
     r.info.reset();

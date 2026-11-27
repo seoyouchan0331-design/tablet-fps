@@ -38,6 +38,41 @@ if (lo.ids[0] !== 'smg' || lo.active !== 'smg') fail('loadout choice not applied
 const pickerGone = await page.evaluate(() => getComputedStyle(document.querySelector('.ow-loadout')).display === 'none');
 if (!pickerGone) fail('loadout picker still covers the screen after START');
 
+// Tablet build must not use full-screen SVG/backdrop filters (they stall iPad Safari on every hit).
+const heavy = await page.evaluate(() => {
+  const out = [];
+  for (const el of document.querySelectorAll('.ow-blood-a, .ow-blood-b, .ow-desat, .ow-hitflash, .ow-touch .tb')) {
+    const cs = getComputedStyle(el);
+    if ((cs.filter && cs.filter !== 'none' && cs.display !== 'none') || (cs.backdropFilter && cs.backdropFilter !== 'none' && cs.display !== 'none') || (cs.mixBlendMode && cs.mixBlendMode !== 'normal'))
+      out.push(`${el.className}: filter=${cs.filter} backdrop=${cs.backdropFilter} blend=${cs.mixBlendMode}`);
+  }
+  return out;
+});
+console.log('heavy css', heavy.length);
+if (heavy.length) fail('heavy CSS effects in the tablet build:\n' + heavy.join('\n'));
+
+// Every shader must already be compiled at boot: show the hidden duel avatar and draw.
+const lateCompiles = await page.evaluate(async () => {
+  const e = window.__ENGINE__; const r = e.ctx.peek('render').renderer;
+  const before = r.info.programs.length;
+  const opp = e.ctx.peek('opponent'); opp.avatar.setAlive(true); opp.avatar.setPose(0, 0, 5, 0);
+  await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+  opp.avatar.hide();
+  return r.info.programs.length - before;
+});
+console.log('late shader compiles when the opponent appears', lateCompiles);
+// The "starved" fallback (shadows off) must not change shader programs either.
+const starvedCompiles = await page.evaluate(async () => {
+  const e = window.__ENGINE__; const rs = e.ctx.peek('render'); const r = rs.renderer;
+  const before = r.info.programs.length;
+  if (rs.dynres) rs.dynres.starved = true;
+  await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(res))));
+  return r.info.programs.length - before;
+});
+console.log('shader compiles when shadows fall back', starvedCompiles);
+if (starvedCompiles > 0) fail('shadow fallback recompiled shaders mid-game');
+if (lateCompiles > 0) fail('opponent avatar compiled shaders mid-game (not prewarmed)');
+
 const info = await page.evaluate(() => {
   const e = window.__ENGINE__;
   return { touch: e.ctx.config.touch, quality: e.ctx.config.quality, overlay: !!document.querySelector('.ow-touch'),
