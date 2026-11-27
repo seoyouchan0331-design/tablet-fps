@@ -7,16 +7,17 @@
  *   CHROME_PATH=/opt/pw-browsers/chromium node tools/duel-e2e.mjs [--port=4173]
  */
 import { chromium, devices } from 'playwright';
+import { ipad, gameUrl } from './lib/env.mjs';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')));
 const PORT = Number(args.port ?? 4173);
-const URL = `http://127.0.0.1:${PORT}/?net=bc`;
+const URL = gameUrl(`http://127.0.0.1:${PORT}/?net=bc`);
 let failed = false;
 const fail = (m) => { console.error('FAIL', m); failed = true; };
 const step = (m) => console.log('·', m);
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const ctx = await browser.newContext({ ...devices['iPad Pro 11 landscape'] });
+const ctx = await browser.newContext(ipad());
 const errors = [];
 const open = async (name) => {
   const p = await ctx.newPage();
@@ -107,7 +108,15 @@ for (let i = 0; i < 400; i++) {
 }
 await press('touchEnd');
 await A.waitForTimeout(1500);
-console.log('ROUND END  A', JSON.stringify(await snap(A)), 'B', JSON.stringify(await snap(B)));
+const end = [await snap(A), await snap(B)];
+console.log('ROUND END  A', JSON.stringify(end[0]), 'B', JSON.stringify(end[1]));
 await A.waitForTimeout(6000);
-console.log('NEXT ROUND A', JSON.stringify(await snap(A)), 'B', JSON.stringify(await snap(B)));
+const next = [await snap(A), await snap(B)];
+console.log('NEXT ROUND A', JSON.stringify(next[0]), 'B', JSON.stringify(next[1]));
 await browser.close();
+// A shader compiled mid-match is a visible freeze on an iPad.
+const late = [...end, ...next].flatMap((s) => s.added ?? []);
+if (phase !== 'hit') console.log('FAIL no hit landed, so the hit moment was not measured');
+if (late.length) console.log('FAIL programs compiled mid-match:', late.join(', '));
+console.log(late.length || phase !== 'hit' ? 'STALL FAILED' : 'STALL OK');
+process.exitCode = late.length || phase !== 'hit' ? 1 : 0;

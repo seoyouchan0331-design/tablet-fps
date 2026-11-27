@@ -6,15 +6,16 @@
  *   CHROME_PATH=/opt/pw-browsers/chromium node tools/weapons-e2e.mjs [--port=4173]
  */
 import { chromium, devices } from 'playwright';
+import { ipad, gameUrl } from './lib/env.mjs';
 const PORT = Number((process.argv.find((a) => a.startsWith('--port=')) ?? '--port=4173').split('=')[1]);
 let failed = false;
 const fail = (m) => { console.error('FAIL', m); failed = true; };
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
-const ctx = await b.newContext({ ...devices['iPad Pro 11 landscape'] });
+const ctx = await b.newContext(ipad());
 const p = await ctx.newPage();
 p.on('pageerror', (e) => fail('page error ' + String(e).slice(0, 200)));
 const frames = (n) => p.evaluate((n) => new Promise((r) => { let i = 0; const f = () => (++i >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
-await p.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'commit' });
+await p.goto(gameUrl(`http://127.0.0.1:${PORT}/`), { waitUntil: 'commit' });
 await p.waitForFunction(() => window.__READY__ === true, null, { timeout: 600000, polling: 2000 });
 await p.waitForSelector('[data-act=practice]', { timeout: 30000 });
 await p.evaluate(() => document.querySelector('[data-act=practice]').click());

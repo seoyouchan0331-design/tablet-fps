@@ -38,6 +38,14 @@ const config = createConfig({
   dynamicResolution: !capture && (params.get('dynres') ?? (touch ? '1' : '0')) === '1',
 });
 
+// `?fast=1` — automated tests on a machine without a GPU: the same renderer,
+// shaders and code paths, but far fewer pixels and a smaller shadow map so a
+// software rasteriser can keep up. Never set by players.
+if (params.get('fast') === '1') {
+  config.q.pixelBudget = 3.2e5;
+  config.q.shadowMapSize = 512;
+}
+
 // Per-device player settings: key bindings, touch layout, touch look speed.
 const settings = capture ? null : loadSettings();
 if (settings) {

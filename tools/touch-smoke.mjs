@@ -4,6 +4,7 @@
  *   node tools/touch-smoke.mjs --port=4173 --out=shots/touch.png
  */
 import { chromium, devices } from 'playwright';
+import { ipad, gameUrl } from './lib/env.mjs';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')));
 const PORT = Number(args.port ?? 4173);
@@ -11,14 +12,14 @@ const OUT = args.out ?? 'shots/touch.png';
 const fail = (m) => { console.error('FAIL', m); process.exitCode = 1; };
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await browser.newContext({ ...devices['iPad Pro 11 landscape'] });
+const ctx = await browser.newContext(ipad());
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('response', (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); if (process.env.VERBOSE) console.log('[page]', m.type(), m.text().slice(0, 160)); });
 
-await page.goto(`http://127.0.0.1:${PORT}/`);
+await page.goto(gameUrl(`http://127.0.0.1:${PORT}/`));
 await page.waitForFunction(() => window.__READY__ === true, null, { timeout: 240000 });
 
 // Main menu -> PRACTICE opens the loadout picker.

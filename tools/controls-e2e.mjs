@@ -5,11 +5,12 @@
  *   CHROME_PATH=/opt/pw-browsers/chromium node tools/controls-e2e.mjs [--port=4173]
  */
 import { chromium, devices } from 'playwright';
+import { ipad, gameUrl } from './lib/env.mjs';
 const PORT = Number((process.argv.find((a) => a.startsWith('--port=')) ?? '--port=4173').split('=')[1]);
 let failed = false;
 const fail = (m) => { console.error('FAIL', m); failed = true; };
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const ctx = await b.newContext({ ...devices['iPad Pro 11 landscape'] });
+const ctx = await b.newContext(ipad());
 const p = await ctx.newPage();
 p.on('pageerror', (e) => fail('page error ' + String(e).slice(0, 200)));
 const boot = async () => {
@@ -21,7 +22,7 @@ const boot = async () => {
   await p.waitForTimeout(1500);
 };
 const click = (act) => p.evaluate((a) => document.querySelector(`[data-act="${a}"]`).click(), act);
-await p.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'commit' });
+await p.goto(gameUrl(`http://127.0.0.1:${PORT}/`), { waitUntil: 'commit' });
 await boot();
 
 // ---- rebind Jump to J ----------------------------------------------------------
