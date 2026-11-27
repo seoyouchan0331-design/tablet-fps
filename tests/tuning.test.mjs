@@ -17,4 +17,5 @@ test('arena movement is 35 % faster than the original tuning', () => {
 
 test('dash tuning matches the spec', () => {
   assert.equal(MOVE.dash.cooldown, 3);
+  assert.equal(MOVE.dash.slideSpeed, 18);
 });

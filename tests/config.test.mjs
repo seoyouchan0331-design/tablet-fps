@@ -24,3 +24,7 @@ test('mobile preset: one shadow cascade; depth prepass stays on (sky aerial pers
   assert.equal(QUALITY_PRESETS.mobile.cascades, 1);
   for (const [name, q] of Object.entries(QUALITY_PRESETS)) assert.equal(q.prepass, true, name);
 });
+
+test('mobile preset may climb to full resolution when the tablet has headroom', () => {
+  assert.equal(QUALITY_PRESETS.mobile.dynresMax, 1);
+});

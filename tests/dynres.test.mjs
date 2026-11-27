@@ -56,3 +56,17 @@ test('ignores huge one-off hitches (tab switch)', () => {
   assert.equal(feed(d, 10, 0.5), 0);
   assert.equal(d.scale, 0.7);
 });
+
+test('boot warm-up: slow frames in the first 3 s never lower the scale', () => {
+  const d = new DynRes({ target: 1 / 60, min: 0.45, max: 1, start: 0.7, warmup: 3 });
+  assert.equal(d.scale, 0.7);
+  assert.equal(feed(d, 60, 2.9), 0);
+  assert.equal(d.scale, 0.7);
+});
+
+test('starts at `start` and can climb above it up to max when there is headroom', () => {
+  const d = new DynRes({ target: 1 / 60, min: 0.45, max: 1, start: 0.7, warmup: 0 });
+  assert.equal(d.scale, 0.7);
+  feed(d, 16.7, 30); // vsync-locked, never slow: keeps probing up
+  assert.ok(d.scale > 0.85, `got ${d.scale}`);
+});

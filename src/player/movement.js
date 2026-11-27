@@ -353,30 +353,24 @@ export class Movement {
   /** DASH overrides horizontal velocity for its short window; the controller's
    *  swept move below still resolves it against walls. */
   _applyDash(cmd, wish, wishLen) {
+    if (!cmd.dashPressed) return;
     const now = this.ctx.time.elapsed;
+    const dx = wishLen > 1e-4 ? wish.x : this._fwd.x;
+    const dz = wishLen > 1e-4 ? wish.z : this._fwd.z;
+    if (!this.dash.tryStart(now, dx, dz)) return;
+    const grounded = this.character.grounded;
     const v = this.velocity;
-    if (cmd.dashPressed) {
-      const dx = wishLen > 1e-4 ? wish.x : this._fwd.x;
-      const dz = wishLen > 1e-4 ? wish.z : this._fwd.z;
-      if (this.dash.tryStart(now, dx, dz)) {
-        if (this.sliding) this._endSlide(false);
-        this.ctx.events?.emit?.('player:dash', { x: dx, z: dz });
-      }
-    }
-    if (this.dash.velocity(now, this._dashV)) {
-      v.x = this._dashV.x;
-      v.z = this._dashV.z;
+    this.dash.launch(this._dashV, grounded);
+    v.x = this._dashV.x;
+    v.z = this._dashV.z;
+    // On the ground the dash IS a slide: crouched camera, slide drag bleeds the
+    // speed off so it glides, and jump-out keeps the burst.
+    if (grounded) {
+      if (this.sliding) this.sliding = false;
+      this._beginSlide(cmd, wish, wishLen, this.dash.slideSpeed, this.dash.slideSpeed);
       this.dashing = true;
-    } else if (this.dashing) {
-      // Leaving the dash: keep a burst, but never more than a slide entry.
-      this.dashing = false;
-      const sp = Math.hypot(v.x, v.z);
-      const cap = MOVE.slide.entrySpeed;
-      if (sp > cap) {
-        v.x *= cap / sp;
-        v.z *= cap / sp;
-      }
     }
+    this.ctx.events?.emit?.('player:dash', { x: dx, z: dz, grounded });
   }
 
   _tickTimers(h) {
@@ -518,7 +512,8 @@ export class Movement {
     }
   }
 
-  _beginSlide(cmd, wish, wishLen, currentSpeed) {
+  /** forceSpeed (dash) overrides the usual entry-speed clamp. */
+  _beginSlide(cmd, wish, wishLen, currentSpeed, forceSpeed = 0) {
     const v = this.velocity;
     let dx = v.x, dz = v.z;
     let l = Math.hypot(dx, dz);
@@ -528,7 +523,9 @@ export class Movement {
     if (l < 1e-4) return;
     dx /= l; dz /= l;
 
-    const target = Math.max(MOVE.slide.minEntry, Math.min(MOVE.slide.entrySpeed, currentSpeed * 1.3));
+    const target = forceSpeed > 0
+      ? forceSpeed
+      : Math.max(MOVE.slide.minEntry, Math.min(MOVE.slide.entrySpeed, currentSpeed * 1.3));
     v.x = dx * target;
     v.z = dz * target;
     this._slideDirX = dx;
@@ -549,6 +546,7 @@ export class Movement {
 
   _endSlide(intoJump) {
     this.sliding = false;
+    this.dashing = false;
     this._slideCooldown = MOVE.slide.cooldown;
     this._slideTime = 0;
     if (intoJump) {

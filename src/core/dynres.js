@@ -12,16 +12,22 @@ const WINDOW = 1.0; // seconds of frames per decision
 const STEP_DOWN = 0.1;
 const STEP_UP = 0.05;
 const HITCH = 0.25; // a single frame longer than this is a stall, not load
-const STABLE_WINDOWS_TO_PROBE = 5;
+const STABLE_WINDOWS_TO_PROBE = 3;
 const PROBE_BAN = 30; // seconds
 const PROBE_BLAME = 5; // a slowdown this soon after a probe is the probe's fault
 
 export class DynRes {
-  constructor({ target = 1 / 60, min = 0.45, max = 1 } = {}) {
+  /**
+   * start: initial scale (defaults to max). warmup: seconds at boot during
+   * which frames are ignored — shader/texture uploads hitch there and must not
+   * push the resolution down for the rest of the match.
+   */
+  constructor({ target = 1 / 60, min = 0.45, max = 1, start = max, warmup = 0 } = {}) {
     this.target = target;
     this.min = min;
     this.max = max;
-    this.scale = max;
+    this.scale = Math.min(max, Math.max(min, start));
+    this.warmup = warmup;
     this._acc = 0;
     this._n = 0;
     this._cooldown = false;
@@ -35,6 +41,7 @@ export class DynRes {
   sample(dt) {
     if (!(dt > 0) || dt > HITCH) return false;
     this._clock += dt;
+    if (this._clock < this.warmup) return false;
     this._acc += dt;
     this._n++;
     if (this._acc < WINDOW) return false;

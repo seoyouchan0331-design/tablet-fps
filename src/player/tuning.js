@@ -76,8 +76,8 @@ export const MOVE = {
   /** Air control: a quarter of ground authority, and it cannot add speed. */
   airAccelScale: 0.25,
   airSpeedCap: SPEED_SCALE * 3.4,
-  /** DASH: short burst along the move direction (see dash.js). */
-  dash: { cooldown: 3, duration: 0.15, speed: 22 },
+  /** DASH: a long fast slide (see dash.js); in the air, a gentler push. */
+  dash: { cooldown: 3, slideSpeed: 18, airSpeed: 11 },
   terminalSpeed: 55,
 
   /** Grace windows that hide input/timing error. */

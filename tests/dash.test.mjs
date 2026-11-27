@@ -17,14 +17,21 @@ test('ready again exactly at 3.0 s', () => {
   assert.equal(d.tryStart(13, 1, 0), true);
 });
 
-test('velocity is active for 0.15 s at speed 22 along the normalised direction', () => {
+test('dash is a fast slide: launch velocity along the normalised direction at slideSpeed', () => {
   const d = new Dash();
+  assert.equal(d.slideSpeed, 18);
   d.tryStart(0, 3, 4);
-  const v = { x: 0, z: 0 };
-  assert.equal(d.velocity(0.1, v), true);
-  assert.ok(Math.abs(Math.hypot(v.x, v.z) - 22) < 1e-9);
+  const v = d.launch({ x: 0, z: 0 }, true);
+  assert.ok(Math.abs(Math.hypot(v.x, v.z) - 18) < 1e-9);
   assert.ok(Math.abs(v.x / v.z - 0.75) < 1e-9);
-  assert.equal(d.velocity(0.16, v), false);
+});
+
+test('in the air the push is gentler (airSpeed)', () => {
+  const d = new Dash();
+  assert.ok(d.airSpeed < d.slideSpeed);
+  d.tryStart(0, 1, 0);
+  const v = d.launch({ x: 0, z: 0 }, false);
+  assert.ok(Math.abs(v.x - d.airSpeed) < 1e-9 && v.z === 0);
 });
 
 test('zero direction is refused (caller must pass facing)', () => {

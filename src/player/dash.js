@@ -1,13 +1,15 @@
 /**
- * DASH: a short burst of horizontal velocity in the move direction.
- * Pure timing logic — movement.js feeds the velocity through the character
- * controller's swept move, so a dash can never tunnel through a wall.
+ * DASH: a long, fast slide. On the ground it launches a slide at slideSpeed
+ * along the move direction (movement.js then lets slide drag bleed it off, so
+ * it glides rather than teleports); in the air it is a gentler push.
+ * Pure timing + launch maths — the character controller resolves the motion,
+ * so a dash can never tunnel through a wall.
  */
 export class Dash {
-  constructor({ cooldown = 3, duration = 0.15, speed = 22 } = {}) {
+  constructor({ cooldown = 3, slideSpeed = 18, airSpeed = 11 } = {}) {
     this.cooldown = cooldown;
-    this.duration = duration;
-    this.speed = speed;
+    this.slideSpeed = slideSpeed;
+    this.airSpeed = airSpeed;
     this._start = -Infinity;
     this._dx = 0;
     this._dz = 0;
@@ -31,12 +33,11 @@ export class Dash {
     return true;
   }
 
-  /** Writes the dash velocity into out while active; returns false when idle. */
-  velocity(now, out) {
-    const t = now - this._start;
-    if (t < 0 || t > this.duration) return false;
-    out.x = this._dx * this.speed;
-    out.z = this._dz * this.speed;
-    return true;
+  /** Horizontal launch velocity for the dash just started. */
+  launch(out, grounded) {
+    const s = grounded ? this.slideSpeed : this.airSpeed;
+    out.x = this._dx * s;
+    out.z = this._dz * s;
+    return out;
   }
 }

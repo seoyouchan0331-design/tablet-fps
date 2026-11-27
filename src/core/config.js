@@ -23,6 +23,8 @@ export const QUALITY_PRESETS = {
   // the pixel ratio is pinned to 1 and dynamic resolution trims the rest.
   mobile: {
     renderScale: 0.7,
+    /** Dynamic resolution starts at renderScale and may climb to this. */
+    dynresMax: 1,
     maxPixelRatio: 1,
     shadowMapSize: 1024,
     cascades: 1,

@@ -136,7 +136,13 @@ export class RenderSystem {
     this.frame = 0;
     // Runtime resolution scaling (tablets). Ceiling is the preset's own scale.
     this.dynres = cfg.dynamicResolution
-      ? new DynRes({ target: 1 / 60, min: Math.min(0.45, q.renderScale), max: q.renderScale })
+      ? new DynRes({
+          target: 1 / 60,
+          min: Math.min(0.45, q.renderScale),
+          max: q.dynresMax ?? q.renderScale,
+          start: q.renderScale,
+          warmup: 3,
+        })
       : null;
     this._lastRaw = 0;
 

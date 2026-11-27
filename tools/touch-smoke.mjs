@@ -54,18 +54,25 @@ const vp = page.viewportSize();
 
 await page.screenshot({ path: OUT.replace(/\.png$/, '-idle.png'), timeout: 240000 });
 
-// 0) DASH (keyboard Q works alongside touch): horizontal displacement over ~0.4 s
+// 0) DASH is a long fast slide (keyboard Q works alongside touch).
+// Face the open lane toward +x: straight ahead from spawn is the pillar.
+await page.evaluate(() => { window.__ENGINE__.ctx.peek('player').movement.yaw = -Math.PI / 2; });
+await frames(2);
 const posXZ = () => page.evaluate(() => { const p = window.__ENGINE__.ctx.peek('player').position; return [p.x, p.z]; });
 const d0 = await posXZ();
 await page.keyboard.down('KeyQ');
-await frames(2);
+await frames(1);
+const slid = await page.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.sliding);
 await page.keyboard.up('KeyQ');
-await page.waitForTimeout(400);
+// Measure over 0.9 s of GAME time: a software-GL runner may draw only a few frames per second.
+const tDash = await page.evaluate(() => window.__ENGINE__.ctx.time.elapsed);
+await page.waitForFunction((t) => window.__ENGINE__.ctx.time.elapsed >= t + 0.9, tDash, { timeout: 60000, polling: 100 });
 const d1 = await posXZ();
 const dashDist = Math.hypot(d1[0] - d0[0], d1[1] - d0[1]);
 const cd = await page.evaluate(() => { const e = window.__ENGINE__; return e.ctx.peek('player').movement.dash.cooldownLeft(e.ctx.time.elapsed); });
-console.log('dash moved', dashDist.toFixed(2), 'm, cooldown left', cd.toFixed(2));
-if (dashDist < 1.5) fail('dash did not move the player');
+console.log('dash slid', slid, 'moved', dashDist.toFixed(2), 'm in 0.9 s game time, cooldown left', cd.toFixed(2));
+if (!slid) fail('dash did not start a slide');
+if (dashDist < 5) fail('dash glide too short');
 if (!(cd > 0)) fail('dash cooldown not running');
 
 // 1) drag on the right half rotates the camera
