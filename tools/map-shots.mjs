@@ -10,7 +10,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
 const p = await (await b.newContext(ipad())).newPage();
 await p.goto(gameUrl(`http://127.0.0.1:${PORT}/`), { waitUntil: 'commit' });
 await p.waitForFunction(() => window.__READY__ === true, null, { timeout: 600000, polling: 2000 });
-for (const id of ['grid', 'lanes', 'blocks', 'field']) {
+for (const id of ['grid', 'lanes', 'blocks', 'town', 'field']) {
   const url = await p.evaluate((id) => {
     const e = window.__ENGINE__.ctx; const r = e.peek('render').renderer;
     e.peek('world').load(id);

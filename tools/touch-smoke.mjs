@@ -150,6 +150,9 @@ await page.evaluate(() => {
 // to the first nearby spot with a clear line to the dummy's chest.
 const spot = await page.evaluate(() => {
   const e = window.__ENGINE__; const pl = e.ctx.peek('player'); const ph = e.ctx.peek('physics');
+  // hold the dummy still (keep it ticking): a strafe could carry it behind cover after the line was checked
+  const pr = e.ctx.peek('practice'); pr.update = (dt) => pr.avatar.tick(dt);
+  pr.dummy.hp = 100; pr.avatar.setAlive(true); // the earlier fire test may have dropped it
   const a = e.ctx.peek('practice').avatar.position;
   const V = pl.position.constructor;
   for (const [x, z] of [[-3, 8], [3, 8], [-6, 2], [6, 2], [-2, 0.5], [2, -3], [-7, -4]]) {
@@ -162,6 +165,7 @@ const spot = await page.evaluate(() => {
   return null;
 });
 console.log('clear line from', JSON.stringify(spot));
+await page.waitForFunction(() => window.__ENGINE__.ctx.peek('practice').avatar.headY > 1.3, null, { timeout: 20000 }).catch(() => fail('dummy never stood up'));
 if (!spot) fail('no clear line to the dummy from any test spot');
 await frames(3);
 const aimAtDummy = () => page.evaluate(() => {
@@ -171,9 +175,10 @@ const aimAtDummy = () => page.evaluate(() => {
 });
 await aimAtDummy();
 await frames(3);
-// aim and measure in the same tick: the dummy keeps strafing between frames
+// aim and measure in the same tick, with the dummy held where the line is clear
 const aa = await page.evaluate(() => {
-  const e = window.__ENGINE__; const pl = e.ctx.peek('player'); const a = e.ctx.peek('practice').avatar.position;
+  const e = window.__ENGINE__;
+  const pl = e.ctx.peek('player'); const a = e.ctx.peek('practice').avatar.position;
   const eye = pl.eyePosition; const dx = a.x - eye.x, dy = a.y + 1.1 - eye.y, dz = a.z - eye.z;
   pl.movement.yaw = Math.atan2(-dx, -dz); pl.movement.pitch = Math.atan2(dy, Math.hypot(dx, dz));
   const r = pl._aimAssist(1 / 60); return { ...r, level: e.ctx.config.aimAssist };

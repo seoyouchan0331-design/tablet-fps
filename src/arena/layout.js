@@ -9,6 +9,7 @@
  * Height levels (box tops): ground 0, steps 0.6 / 0.75 / 1.2 / 1.8, cover 1.2 /
  * 1.6, ledges 1.5, high deck 2.4, pillars 4.
  */
+import { mirrorPiece as mirror, windowWall, building, prop } from './shapes.js';
 const SIZE = 30;
 const H = SIZE / 2;
 
@@ -29,7 +30,7 @@ const HALF = [
   { x: 0, y: 2, z: 7, w: 1.5, h: 4, d: 1.5 },
 ];
 
-const mirror = (b) => ({ ...b, x: b.x === 0 ? 0 : -b.x, z: b.z === 0 ? 0 : -b.z });
+
 
 export const ARENA = {
   size: SIZE,
@@ -50,15 +51,15 @@ export const ARENA = {
   ],
 };
 
-/** Floor + four perimeter walls for a size x size map. */
-const shell = (size = SIZE) => {
-  const h = size / 2;
+/** Floor + four perimeter walls for a size (x) by depth (z) map. */
+const shell = (size = SIZE, depth = size, extra = {}) => {
+  const h = size / 2, hz = depth / 2;
   return [
-    { x: 0, y: -0.25, z: 0, w: size, h: 0.5, d: size, floor: true },
-    { x: 0, y: 2.5, z: h - 0.5, w: size, h: 5, d: 1, wall: true },
-    { x: 0, y: 2.5, z: -(h - 0.5), w: size, h: 5, d: 1, wall: true },
-    { x: h - 0.5, y: 2.5, z: 0, w: 1, h: 5, d: size - 2, wall: true },
-    { x: -(h - 0.5), y: 2.5, z: 0, w: 1, h: 5, d: size - 2, wall: true },
+    { x: 0, y: -0.25, z: 0, w: size, h: 0.5, d: depth, floor: true },
+    { x: 0, y: 2.5, z: hz - 0.5, w: size, h: 5, d: 1, wall: true, ...extra },
+    { x: 0, y: 2.5, z: -(hz - 0.5), w: size, h: 5, d: 1, wall: true, ...extra },
+    { x: h - 0.5, y: 2.5, z: 0, w: 1, h: 5, d: depth - 2, wall: true, ...extra },
+    { x: -(h - 0.5), y: 2.5, z: 0, w: 1, h: 5, d: depth - 2, wall: true, ...extra },
   ];
 };
 const SPAWNS = ARENA.spawns;
@@ -145,6 +146,55 @@ const FIELD_HALF = [
   { x: -26, y: 0.6, z: 4, w: 1, h: 1.2, d: 3 },
 ];
 
+/**
+ * TOWN — an original plaza town in the grey-box style, 64 x 36 m, longer
+ * than deep. A sculpted fountain in the middle of the plaza (Blender),
+ * two-storey houses around it you can walk into and climb (doors, windows on
+ * both floors, inside stairs), arched gateways (Blender) between the plaza
+ * and each spawn courtyard, turned market crates and a street behind the
+ * houses on each long side.
+ */
+const TOWN_W = 64;
+const TOWN_D = 36;
+const TOWN_HALF = [
+  // corner house south-east of the plaza: door to the plaza, windows on both floors
+  ...building({
+    x: 12, z: -10, w: 10, d: 7.5, stair: '+x',
+    doors: [{ side: '+z', at: -2.5 }, { side: '-x', at: 0.8 }],
+    windows: [
+      { side: '+z', floor: 1, at: -2.5 }, { side: '+z', floor: 1, at: 2.5 }, { side: '+z', floor: 0, at: 2.5 },
+      { side: '+x', floor: 1, at: 0 }, { side: '-x', floor: 1, at: 0 },
+    ],
+  }),
+  // house north-east of the plaza
+  ...building({
+    x: 13, z: 10, w: 9, d: 8, stair: '-x',
+    doors: [{ side: '-z', at: 1.5 }],
+    windows: [
+      { side: '-z', floor: 1, at: -2 }, { side: '-z', floor: 1, at: 2 }, { side: '-x', floor: 1, at: 0 },
+      { side: '-x', floor: 0, at: -1.5 }, { side: '+x', floor: 1, at: 1 },
+    ],
+  }),
+  // tall corner house by the spawn courtyard, overlooking the street
+  ...building({
+    x: 25.5, z: -12.6, w: 9, d: 7.2, stair: '-x',
+    doors: [{ side: '+z', at: -1.5 }],
+    windows: [{ side: '+z', floor: 1, at: 1.5 }, { side: '-x', floor: 1, at: 0 }, { side: '+x', floor: 1, at: 0 }],
+  }),
+  // arched gateway between the plaza and the spawn courtyard
+  prop('arch', 19.5, 0, Math.PI / 2),
+  // spawn courtyard walls (the courtyard opens toward the plaza through the arch and its sides)
+  { x: 27.5, y: 1.6, z: 6.5, w: 7, h: 3.2, d: 0.6 },
+  { x: 27.5, y: 1.6, z: -6.5, w: 7, h: 3.2, d: 0.6 },
+  // market crates, turned, and a low wall with a window
+  { x: 6, y: 0.6, z: 3.5, w: 4, h: 1.2, d: 1.6, ry: Math.PI / 4 },
+  { x: 4, y: 0.6, z: -7, w: 3, h: 1.2, d: 1.4, ry: -Math.PI / 6 },
+  { x: 9.5, y: 0.5, z: 0.5, w: 1, h: 1, d: 1 },
+  ...windowWall({ axis: 'x', from: 1, to: 7, at: 13.5, h: 2.6, t: 0.5, sill: 0.9, top: 1.8, gap: 2 }),
+  // street planter: crouch cover
+  { x: 0, y: 0.3, z: -11, w: 6, h: 0.6, d: 1.2 },
+];
+
 export const MAPS = {
   grid: { label: 'GRID', note: 'Mixed heights, all-round', layout: ARENA },
   lanes: {
@@ -163,6 +213,25 @@ export const MAPS = {
       size: SIZE,
       boxes: [...shell(), { x: 0, y: 0.6, z: 0, w: 2, h: 1.2, d: 2 }, ...BLOCKS_HALF, ...BLOCKS_HALF.map(mirror)],
       spawns: SPAWNS,
+    },
+  },
+  town: {
+    label: 'TOWN',
+    note: 'Plaza town — walk into two-storey houses',
+    roundTime: 40,
+    layout: {
+      size: TOWN_W,
+      depth: TOWN_D,
+      boxes: [
+        ...shell(TOWN_W, TOWN_D),
+        prop('fountain', 0, 0), // its own twin
+        ...TOWN_HALF,
+        ...TOWN_HALF.map(mirror),
+      ],
+      spawns: [
+        { x: 27, y: 0, z: 0, yaw: Math.PI / 2 },
+        { x: -27, y: 0, z: 0, yaw: -Math.PI / 2 },
+      ],
     },
   },
   field: {
@@ -188,12 +257,17 @@ const same = (a, b) => Math.abs(a - b) < EPS;
 export function validateLayout(layout) {
   const errors = [];
   const h = layout.size / 2;
+  const hz = (layout.depth ?? layout.size) / 2;
+  const FLIP = { '+x': '-x', '-x': '+x', '+z': '-z', '-z': '+z' };
   if (layout.spawns?.length !== 2) errors.push('need exactly 2 spawns');
   for (const b of layout.boxes) {
-    if (Math.abs(b.x) + b.w / 2 > h + EPS || Math.abs(b.z) + b.d / 2 > h + EPS)
-      errors.push(`box at ${b.x},${b.z} is outside the arena`);
+    // a turned piece's footprint reaches further along each axis
+    const c = Math.abs(Math.cos(b.ry ?? 0)), s = Math.abs(Math.sin(b.ry ?? 0));
+    const ex = (c * b.w + s * b.d) / 2, ez = (s * b.w + c * b.d) / 2;
+    if (Math.abs(b.x) + ex > h + EPS || Math.abs(b.z) + ez > hz + EPS) errors.push(`box at ${b.x},${b.z} is outside the arena`);
     const twin = layout.boxes.find(
-      (o) => same(o.x, -b.x) && same(o.z, -b.z) && same(o.y, b.y) && same(o.w, b.w) && same(o.h, b.h) && same(o.d, b.d)
+      (o) => same(o.x, -b.x) && same(o.z, -b.z) && same(o.y, b.y) && same(o.w, b.w) && same(o.h, b.h) && same(o.d, b.d) &&
+        same(o.ry ?? 0, b.ry ?? 0) && (b.ramp ? o.ramp === FLIP[b.ramp] : !o.ramp)
     );
     if (!twin) errors.push(`box at ${b.x},${b.z} has no symmetric twin`);
   }

@@ -18,6 +18,7 @@ const SUITES = {
   weapons: 'tools/weapons-e2e.mjs',
   hitreg: 'tools/hitreg-e2e.mjs',
   phone: 'tools/phone-e2e.mjs',
+  dev: 'tools/dev-e2e.mjs',
 };
 
 /** Which suites a changed path needs. */
@@ -28,6 +29,7 @@ const RULES = [
   [/^src\/(ui|core\/(input|settings))/, ['controls', 'smoke', 'phone']],
   [/^src\/(render|player|physics|world|fx)\//, ['smoke', 'stall']],
   [/^src\/main\.js|^index\.html|^vite\.config/, ['smoke']],
+  [/^src\/(dev|arena)\//, ['dev']],
 ];
 
 const args = process.argv.slice(2);

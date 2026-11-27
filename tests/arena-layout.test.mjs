@@ -61,22 +61,22 @@ test('spawns are not inside a box', () => {
 // ---- every map --------------------------------------------------------------
 import { MAPS, MAP_IDS } from '../src/arena/layout.js';
 
-test('four maps, GRID first and identical to ARENA', () => {
-  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'field']);
+test('five maps, GRID first and identical to ARENA', () => {
+  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'town', 'field']);
   assert.equal(MAPS.grid.layout, ARENA);
 });
 
-for (const id of ['grid', 'lanes', 'blocks', 'field']) {
+for (const id of ['grid', 'lanes', 'blocks', 'field', 'town']) {
   const L = MAPS[id].layout;
   test(`${id}: valid (symmetric, bounded, walls, spawns 24 m apart)`, () => {
     assert.deepEqual(validateLayout(L), []);
   });
   test(`${id}: spawn strafe lanes are clear (practice dummy moves +-5 m)`, () => {
     for (const s of L.spawns) {
-      for (let x = -5; x <= 5; x += 0.5) {
+      for (let x = s.x - 5; x <= s.x + 5; x += 0.5) {
         for (const b of L.boxes) {
           if (b.floor || b.wall) continue;
-          const inside = Math.abs(x - b.x) < b.w / 2 + 0.4 && Math.abs(s.z - b.z) < b.d / 2 + 0.4;
+          const inside = insideXZ(b, x, s.z, 0.4);
           assert.ok(!inside, `${id}: box at ${b.x},${b.z} blocks the spawn lane at x=${x}`);
         }
       }
@@ -110,4 +110,16 @@ test('field: a huge map, spawns far apart, longer rounds, climbable tower', () =
 
 test('maps say their own round time (default 30 s)', () => {
   for (const id of MAP_IDS) assert.ok(Number.isFinite(MAPS[id].roundTime ?? 30));
+});
+
+import { topAt, insideXZ } from '../src/arena/shapes.js';
+test('town: long map with walk-in two-storey houses, Blender props, a ramp to climb', () => {
+  const L = MAPS.town.layout;
+  assert.ok(L.size > (L.depth ?? L.size), 'longer than deep');
+  assert.ok(!L.boxes.some((b) => b.c != null), 'grey-box style: no painted pieces');
+  assert.ok(L.boxes.filter((b) => b.ramp).length >= 4, 'stairs in the houses');
+  assert.ok(L.boxes.some((b) => b.prop === 'arch') && L.boxes.some((b) => b.prop === 'fountain'));
+  const stair = L.boxes.find((b) => b.ramp);
+  assert.ok(stair.y + stair.h / 2 >= 3, 'stairs reach the upper floor');
+  assert.ok(L.boxes.some((b) => b.ry && !b.prop), 'turned crates');
 });

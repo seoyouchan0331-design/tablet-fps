@@ -12,11 +12,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MAPS } from './layout.js';
+import { pieceGeometry, edgeGeometries, topAt, insideXZ } from './shapes.js';
 
 const GREY = 0x8a8f96;
 /** Floor is darker than the boxes so the ground plane never washes out to white under the sun. */
 const FLOOR = 0x2c3137;
-const NEON = new THREE.Color(0.24, 0.95, 1.0).multiplyScalar(3.0); // HDR, survives exposure
 const GRID = new THREE.Color(0.24, 0.95, 1.0).multiplyScalar(0.6);
 const GRID_STEP = 2;
 const KILL_Y = -10;
@@ -32,11 +32,12 @@ export class ArenaSystem {
     this.root.name = 'arena';
     // Materials live for the whole session: swapping maps only swaps geometry,
     // so no shader program is ever compiled after boot.
-    this.material = new THREE.MeshStandardMaterial({ color: GREY, roughness: 0.9, metalness: 0 });
-    this.floorMaterial = new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 0.95, metalness: 0 });
+    // one vertex-coloured material per layer: maps paint their own colours
+    this.material = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.9, metalness: 0 });
+    this.floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, metalness: 0 });
     const lite = !!ctx.config.q?.lite;
-    const neon = lite ? new THREE.Color(0.0, 0.78, 1.0) : NEON;
-    this.lineMaterial = new THREE.MeshBasicMaterial({ color: neon, toneMapped: false });
+    // edge colours come per piece (vertex colours); the full renderer pushes them into HDR
+    this.lineMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(lite ? 1 : 3), vertexColors: true, toneMapped: false });
     this.gridMaterial = new THREE.LineBasicMaterial({ color: GRID, toneMapped: false });
     ctx.scene.add(this.root);
     this.mapId = null;
@@ -74,11 +75,9 @@ export class ArenaSystem {
     const edgeGeos = [];
     let floorGeo = null;
     for (const b of layout.boxes) {
-      const g = new THREE.BoxGeometry(b.w, b.h, b.d);
-      g.translate(b.x, b.y, b.z);
-      if (b.floor) floorGeo = g;
-      else boxGeos.push(g);
-      edgeGeos.push(...edgeBars(b, b.floor ? 0.08 : 0.045));
+      if (b.floor) floorGeo = pieceGeometry(b, layout.floorColor ?? FLOOR);
+      else boxGeos.push(pieceGeometry(b, layout.color ?? GREY));
+      edgeGeos.push(...edgeGeometries(b, b.floor ? 0.08 : 0.045, layout.edgeColor));
     }
     this.mesh = new THREE.Mesh(mergeGeometries(boxGeos), this.material);
     this.mesh.name = 'arena-boxes';
@@ -90,7 +89,8 @@ export class ArenaSystem {
     this.edges = new THREE.Mesh(mergeGeometries(edgeGeos), this.lineMaterial);
     this.edges.name = 'arena-neon';
     this.edges.userData.owNoShadow = true;
-    this.grid = new THREE.LineSegments(gridGeometry(layout.size, GRID_STEP), this.gridMaterial);
+    this.grid = new THREE.LineSegments(gridGeometry(layout.size, GRID_STEP, layout.depth ?? layout.size), this.gridMaterial);
+    this.grid.visible = layout.grid !== false;
     this.grid.userData.owNoShadow = true;
     this.root.add(this.mesh, this.floor, this.edges, this.grid);
     for (const g of boxGeos) g.dispose();
@@ -101,22 +101,22 @@ export class ArenaSystem {
     physics.addStatic(this.floor, 'concrete');
     physics.rebuildStatic();
 
-    const h = layout.size / 2;
-    this.bounds = new THREE.Box3(new THREE.Vector3(-h, -1, -h), new THREE.Vector3(h, 8, h));
+    const h = layout.size / 2, hz = (layout.depth ?? layout.size) / 2;
+    this.bounds = new THREE.Box3(new THREE.Vector3(-h, -1, -hz), new THREE.Vector3(h, 8, hz));
     this.spawnPoints = layout.spawns.map((s, i) => ({
       position: new THREE.Vector3(s.x, s.y, s.z),
       yaw: s.yaw,
       tag: i === 0 ? 'A' : 'B',
     }));
     this.stats = {
-      staticTris: (this.mesh.geometry.index.count + this.floor.geometry.index.count) / 3,
+      staticTris: (this.mesh.geometry.attributes.position.count + this.floor.geometry.attributes.position.count) / 3,
       instTris: 0,
       instances: 0,
       drawCalls: 4,
     };
     // shadows cover the whole map (and redraw once if the shadow map is frozen)
     const render = ctx.peek?.('render');
-    render?.fitShadow?.(layout.size / 2);
+    render?.fitShadow?.(Math.max(layout.size, layout.depth ?? layout.size) / 2);
     if (render?.sun) render.sun.shadow.needsUpdate = true;
     // the minimap bakes the level once: ask for a fresh bake
     const mm = ctx.peek?.('ui')?.minimap;
@@ -152,22 +152,23 @@ export class ArenaSystem {
     return this.spawnPoints[((i % n) + n) % n];
   }
 
-  /** Top of the highest box under (x, z), or 0 for the bare floor. */
+  /** Top of the highest piece under (x, z) (ramps by their slope), or 0 for the bare floor. */
   groundHeight(x, z) {
     let top = 0;
     for (const b of this.layout.boxes) {
       if (b.wall || b.floor) continue;
-      if (Math.abs(x - b.x) <= b.w / 2 && Math.abs(z - b.z) <= b.d / 2) top = Math.max(top, b.y + b.h / 2);
+      top = Math.max(top, topAt(b, x, z));
     }
     return top;
   }
 
   isOpen(x, z, margin = 0.4) {
     const h = this.layout.size / 2 - 1 - margin;
-    if (Math.abs(x) > h || Math.abs(z) > h) return false;
+    const hz = (this.layout.depth ?? this.layout.size) / 2 - 1 - margin;
+    if (Math.abs(x) > h || Math.abs(z) > hz) return false;
     for (const b of this.layout.boxes) {
-      if (b.wall || b.floor) continue;
-      if (Math.abs(x - b.x) < b.w / 2 + margin && Math.abs(z - b.z) < b.d / 2 + margin) return false;
+      if (b.wall || b.floor || b.deco) continue;
+      if (insideXZ(b, x, z, margin)) return false;
     }
     return true;
   }
@@ -193,28 +194,11 @@ export class ArenaSystem {
   }
 }
 
-/** The 12 edges of a box as thin bars of thickness t. */
-function edgeBars(b, t) {
-  const out = [];
-  const hx = b.w / 2, hy = b.h / 2, hz = b.d / 2;
-  for (const sy of [-1, 1]) for (const sz of [-1, 1]) out.push(bar(b.w + t, t, t, b.x, b.y + sy * hy, b.z + sz * hz));
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.push(bar(t, b.h + t, t, b.x + sx * hx, b.y, b.z + sz * hz));
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) out.push(bar(t, t, b.d + t, b.x + sx * hx, b.y + sy * hy, b.z));
-  return out;
-}
-
-function bar(w, h, d, x, y, z) {
-  const g = new THREE.BoxGeometry(w, h, d);
-  g.translate(x, y, z);
-  return g;
-}
-
-function gridGeometry(size, step) {
-  const h = size / 2 - 1;
+function gridGeometry(size, step, depth = size) {
+  const h = size / 2 - 1, hz = depth / 2 - 1;
   const pts = [];
-  for (let v = -h; v <= h + 1e-6; v += step) {
-    pts.push(v, 0.01, -h, v, 0.01, h, -h, 0.01, v, h, 0.01, v);
-  }
+  for (let v = -h; v <= h + 1e-6; v += step) pts.push(v, 0.01, -hz, v, 0.01, hz);
+  for (let v = -hz; v <= hz + 1e-6; v += step) pts.push(-h, 0.01, v, h, 0.01, v);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   return g;

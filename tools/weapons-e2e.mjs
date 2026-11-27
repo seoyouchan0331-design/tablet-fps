@@ -34,6 +34,7 @@ const setup = await p.evaluate(() => {
   window.__hits = 0; window.__fires = 0;
   e.ctx.events.on('damage:dealt', (ev) => { if (ev.target?.isAvatar) window.__hits++; });
   e.ctx.events.on('weapon:fire', () => window.__fires++);
+  { const pr = e.ctx.peek('practice'); pr.update = (dt) => pr.avatar.tick(dt); } // hold the dummy still (still animating): its strafe can carry it behind cover
   const a = e.ctx.peek('practice').avatar.position;
   const ph = e.ctx.peek('physics'); const V = pl.position.constructor;
   // stand 5 m from the dummy with a clear line

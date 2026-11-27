@@ -1,3 +1,4 @@
+import { DevPanel, devEnabled } from './dev/panel.js';
 import { Engine } from './core/engine.js';
 import { createConfig, detectTouch, pickDefaultQuality } from './core/config.js';
 import { loadSettings } from './core/settings.js';
@@ -111,6 +112,9 @@ console.info('[boot] prewarm', warmup);
 window.__PREWARM__ = warmup;
 
 engine.start();
+
+// Developer test panel (?dev=1, or window.__DEV__ in the dev artifact).
+if (devEnabled(params)) new DevPanel(engine);
 
 // Capture harness handshake: only flag ready once a frame has actually landed.
 //

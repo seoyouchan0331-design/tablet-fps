@@ -23,7 +23,7 @@ await p.waitForTimeout(1200);
 // freeze the dummy and stand 15 m in front of it with a clear line
 await p.evaluate(() => {
   const e = window.__ENGINE__.ctx; const pr = e.peek('practice');
-  pr.update = () => {}; // hold still
+  pr.update = (dt) => pr.avatar.tick(dt); // hold still, but keep animating (hitboxes follow the drawn pose)
   // put it where a player 15 m away has a clear line to its head and body
   const pl = e.peek('player'); const ph = e.peek('physics'); const w = e.peek('world'); const V = pl.position.constructor;
   let ok = false;
@@ -77,11 +77,14 @@ for (const [id, part, dy, scope, side = 0] of [
   // let the previous shot's camera recoil settle (it moves the real aim line)
   await p.waitForFunction(() => { const r = window.__ENGINE__.ctx.peek('player').rig.recoilPitch; return Math.abs(r.spring.value + r.residual) < 0.002; }, null, { timeout: 20000 });
   await reset();
+  // the revived dummy stands back up from its death pose: wait until its head is up
+  await p.waitForFunction(() => window.__ENGINE__.ctx.peek('practice').avatar.headY > 1.3, null, { timeout: 20000 });
   for (let i = 0; i < 3; i++) { await aimAt(dy, side); await frames(1); }
   await p.keyboard.down('KeyF'); await frames(1); await p.keyboard.up('KeyF');
   for (let i = 0; i < 10; i++) await frames(1);
   if (scope) await p.keyboard.up('KeyE');
   const r = await p.evaluate(() => ({ shots: window.__shots, hits: window.__hits }));
+  if (process.env.DEBUG) console.log('  dbg', JSON.stringify(await p.evaluate(() => { const a = window.__ENGINE__.ctx.peek('practice').avatar; const h = a.head; return { headY: a.headY, alive: a.alive, clip: a.clip, head: [h.ay, h.by, h.radius, h.enabled], pos: [a.position.x, a.position.y, a.position.z] }; })));
   console.log(`${id} at ${part}${side ? ` (${side > 0 ? 'right' : 'left'} edge)` : ''}: ${JSON.stringify(r)}`);
   if (r.shots !== 1) fail(`${id}: ${r.shots} shots fired`);
   if (part === 'miss') {
