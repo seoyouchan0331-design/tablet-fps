@@ -91,6 +91,17 @@ export class EventBus {
     return () => this.off(type, fn);
   }
 
+  /**
+   * Like on(), but runs before every handler already registered. For the one
+   * listener that owns a payload's outcome (e.g. the target applying damage and
+   * setting `killed`), so HUD/audio listeners see the final values.
+   */
+  prepend(type, fn) {
+    const prev = this.#map.get(type);
+    this.#map.set(type, new Set([fn, ...(prev ?? [])]));
+    return () => this.off(type, fn);
+  }
+
   once(type, fn) {
     const off = this.on(type, (e) => {
       off();
