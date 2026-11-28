@@ -25,6 +25,7 @@ import { ClockSync } from '../match/interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn } from './rules.js';
 import { Bot, buildGrid } from './bots.js';
+import { packState, unpackState } from './wire.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
 import { PartyUI, playerName, names, cleanName } from '../ui/party.js';
@@ -342,14 +343,16 @@ export class PartySystem {
           this._broadcastRoster();
         }
         break;
-      case 'p.state':
-        if (this.phase === 'match') {
-          const st = { ...m, id, type: undefined };
+      case 'p.s': {
+        const u = this.phase === 'match' ? unpackState(m.a) : null;
+        if (u) {
+          const st = { ...u, id }; // the sender's id is the link it came on, not what it claims
           this._latest.set(id, st); // where everyone is (spawn picks)
           this._fresh.set(id, st); // what goes out in the next batch
           this._applyState(st);
         }
         break;
+      }
       case 'p.fire':
         if (this.phase === 'match' && Number.isFinite(m.seq) && Number.isFinite(m.t)) {
           this._recordShot(id, m.seq, m.t);
@@ -558,7 +561,10 @@ export class PartySystem {
         if (m.ev) this._applyEvent(m.ev);
         break;
       case 'p.states':
-        if (Array.isArray(m.s)) for (const s of m.s) this._applyState(s);
+        if (Array.isArray(m.s)) for (const a of m.s) {
+          const u = unpackState(a);
+          if (u) this._applyState(u);
+        }
         break;
       case 'p.fire':
         this._applyFire(m);
@@ -932,7 +938,7 @@ export class PartySystem {
     const s = this._myState(raw);
     if (!s) return;
     if (!this.host) {
-      this.link?.send({ ...s, type: 'p.state' });
+      this.link?.send({ type: 'p.s', a: packState(s) });
       return;
     }
     // host: one batch per guest with every state that arrived since the last
@@ -948,7 +954,7 @@ export class PartySystem {
     for (const p of this.players.values()) {
       if (!p.peer) continue;
       const out = fresh.filter((x) => x.id !== p.id);
-      if (out.length) this.link.send(p.peer, { type: 'p.states', s: out });
+      if (out.length) this.link.send(p.peer, { type: 'p.states', s: out.map(packState) });
     }
   }
 
