@@ -175,13 +175,59 @@ await Promise.all([A, B].map((p) => waitP(p, () => window.__ENGINE__.ctx.peek('p
 const botId = await A.evaluate(() => [...window.__ENGINE__.ctx.peek('party').players.values()].find((p) => p.bot).id);
 const p0 = await B.evaluate((id) => { const a = window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar; return a ? [a.position.x, a.position.z, a.alive] : null; }, botId);
 // keep the humans out of the way, then watch the bot hunt
-await A.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-29.5, 0.03, 0));
-await B.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(29.5, 0.03, 0));
-await waitP(A, () => (window.__ENGINE__.ctx.peek('party').botShots ?? 0) > 0, 90000).catch(() => fail('the bot never fired'));
+// hide the humans upstairs in the two gateway houses on one side: the bot must
+// hunt them (walk, climb the stairs) before it can shoot
+await A.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-21, 3.25, -7.5));
+await B.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-21, 3.25, 7.5));
+await waitP(A, () => (window.__ENGINE__.ctx.peek('party').botShots ?? 0) > 0, 150000).catch(() => fail('the bot never found anyone to shoot'));
+const by = await A.evaluate((id) => window.__ENGINE__.ctx.peek('party')._bots.get(id).y, botId);
+step(`the bot fired from height ${by.toFixed(2)} m`);
 const p1 = await B.evaluate((id) => { const a = window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar; return a ? [a.position.x, a.position.z, a.alive] : null; }, botId);
 step(`bot ${botId} seen by B: ${JSON.stringify(p0)} -> ${JSON.stringify(p1)}; host counted ${await A.evaluate(() => window.__ENGINE__.ctx.peek('party').botShots)} bot shots`);
 if (!p0 || !p1) fail('B does not see the bot');
 else if (Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) < 2) fail('the bot did not move');
+
+// ---- back to the room; king of the hill (A + B, no bots) ---------------------------------
+const backToRoom = async () => {
+  await A.evaluate(() => { window.__ENGINE__.ctx.peek('party').rules.timeLeft = 0.01; });
+  await Promise.all([A, B].map((p) => waitAct(p, 'result', 20000).catch(() => fail('no results screen'))));
+  await click(A, 'again');
+  await waitAct(B, 'ready', 15000).catch(() => fail('guest not back in the room'));
+};
+await backToRoom();
+await click(A, 'remove-bot');
+await click(A, 'mode-koth');
+await waitP(B, () => window.__ENGINE__.ctx.peek('party').settings.mode === 'koth', 15000).catch(() => fail('mode did not reach the guest'));
+const teams = await A.evaluate(() => [...window.__ENGINE__.ctx.peek('party').players.values()].map((p) => p.team));
+if (new Set(teams).size < 2) await click(B, 'switch-team');
+for (const p of [A, B]) await click(p, 'ready');
+await Promise.all([A, B].map((p) => waitP(p, () => window.__ENGINE__.ctx.peek('party').live === true, 60000).catch(() => fail('hill match never went live'))));
+await A.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(5, 0.03, 0));
+await B.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-29.5, 0.03, 0));
+const myTeam = await A.evaluate(() => { const P = window.__ENGINE__.ctx.peek('party'); return P.players.get(P.me).team; });
+await waitP(B, (t) => (window.__ENGINE__.ctx.peek('party')._teams?.[t] ?? 0) >= 2, 30000, myTeam).catch(() => fail('holding the hill scored nothing'));
+const hill = await A.evaluate(() => { const P = window.__ENGINE__.ctx.peek('party'); return { teams: P._teams, ring: P._hill?.material.color.getHexString(), hud: window.__ENGINE__.ctx.peek('ui').state.scoreUs }; });
+step(`hill: ${JSON.stringify(hill)}`);
+if (hill.ring !== '2fd8ff') fail('the hill ring should be cyan (ours) for A');
+if (hill.hud < 2) fail("A's HUD does not show the hill points");
+
+// ---- gun game ------------------------------------------------------------------------------
+await backToRoom();
+await click(A, 'mode-gun');
+await waitP(B, () => window.__ENGINE__.ctx.peek('party').settings.mode === 'gun', 15000).catch(() => fail('gun mode did not reach the guest'));
+for (const p of [A, B]) await click(p, 'ready');
+await Promise.all([A, B].map((p) => waitP(p, () => window.__ENGINE__.ctx.peek('party').live === true, 60000).catch(() => fail('gun game never went live'))));
+const w0 = await B.evaluate(() => window.__ENGINE__.ctx.peek('weapons').activeId);
+// two kills for B, booked by the host's rules
+await A.evaluate(() => {
+  const P = window.__ENGINE__.ctx.peek('party');
+  P._hostEvents(P.rules.kill(1, 0));
+  P.rules.players.get(0).alive = true;
+  P._hostEvents(P.rules.kill(1, 0));
+});
+await waitP(B, () => window.__ENGINE__.ctx.peek('weapons').activeId === 'smg', 15000).catch(() => fail('2 kills did not step B up to the SMG'));
+step(`gun game: B started with ${w0}, after 2 kills holds ${await B.evaluate(() => window.__ENGINE__.ctx.peek('weapons').activeId)}`);
+if (w0 !== 'rifle') fail('gun game starts on the rifle');
 
 if (errors.length) { fail('page errors'); for (const e of errors) console.error('  ', e); }
 await browser.close();

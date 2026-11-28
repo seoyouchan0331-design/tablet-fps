@@ -23,7 +23,7 @@ import { smoothRtt } from '../net/ice.js';
 import { validateHit } from '../match/validate.js';
 import { ClockSync } from '../match/interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
-import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn } from './rules.js';
+import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn, isTeamMode, gunFor, HILL } from './rules.js';
 import { Bot, buildNav, BOT_LEVELS } from './bots.js';
 import { packState, unpackState } from './wire.js';
 import { insideXZ } from '../arena/shapes.js';
@@ -293,7 +293,7 @@ export class PartySystem {
   _maybeStart() {
     if (!this.host || this.phase !== 'lobby' || this.players.size < 2) return;
     if (![...this.players.values()].every((p) => p.ready)) return;
-    if (this.settings.mode === 'tdm' && new Set([...this.players.values()].map((p) => p.team)).size < 2) return;
+    if (isTeamMode(this.settings.mode) && new Set([...this.players.values()].map((p) => p.team)).size < 2) return;
     this.rules = new Deathmatch({ mode: this.settings.mode, scoreLimit: this.settings.scoreLimit, timeLimit: this.settings.timeLimit });
     this._cands = spawnCandidates(MAPS[this.settings.map].layout, insideXZ);
     const roster = this._roster();
@@ -420,18 +420,58 @@ export class PartySystem {
     const weapons = this.ctx.peek('weapons');
     for (const p of this.players.values()) {
       if (!p.bot) continue;
-      const def = weapons?.states?.get(p.primary)?.def;
-      const b = new Bot({ id: p.id, grid: this._grid, weapon: { id: p.primary, damage: def?.damage ?? 30, cycleTime: def?.cycleTime ?? 0.1, pellets: def?.pellets ?? 1 }, level: this.settings.botLevel });
+      const gun = this.settings.mode === 'gun' ? gunFor(0) : p.primary;
+      const b = new Bot({ id: p.id, grid: this._grid, weapon: this._botWeapon(gun), level: this.settings.botLevel });
       const s = spawns[p.id];
       if (s) b.place(s.x, s.z, s.yaw);
       this._bots.set(p.id, b);
     }
   }
 
+  _botWeapon(id) {
+    const def = this.ctx.peek('weapons')?.states?.get(id)?.def;
+    return { id, damage: def?.damage ?? 30, cycleTime: def?.cycleTime ?? 0.1, pellets: def?.pellets ?? 1 };
+  }
+
+  /** King of the hill: living players of each team inside the hill. */
+  _inZone() {
+    const n = [0, 0];
+    for (const p of this.players.values()) {
+      if (this.alive[p.id] === false) continue;
+      let q = null;
+      if (p.id === this.me) q = this.ctx.peek('player')?.position;
+      else q = this._bots?.get(p.id) ?? this._latest.get(p.id);
+      if (q && Math.hypot(q.x - HILL.x, q.z - HILL.z) <= HILL.r && q.y < HILL.h) n[p.team]++;
+    }
+    return n;
+  }
+
+  /** The hill's ring on the ground: white = free/contested, cyan = ours, orange = theirs. */
+  _paintHill(ours) {
+    if (!this._hill) return;
+    this._hill.material.color.setHex(ours == null ? 0xe8f4f8 : ours ? 0x2fd8ff : 0xff5a36);
+  }
+
+  _showHill(on) {
+    if (on && !this._hill) {
+      const g = new THREE.RingGeometry(HILL.r - 0.18, HILL.r, 64);
+      g.rotateX(-Math.PI / 2);
+      this._hill = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xe8f4f8, toneMapped: false, transparent: true, opacity: 0.9, depthWrite: false }));
+      this._hill.position.set(HILL.x, 0.04, HILL.z);
+      this._hill.renderOrder = 2;
+      this.ctx.scene.add(this._hill);
+    } else if (!on && this._hill) {
+      this.ctx.scene.remove(this._hill);
+      this._hill.geometry.dispose();
+      this._hill.material.dispose();
+      this._hill = null;
+    }
+  }
+
   _stepBots(dt, raw) {
     if (!this._bots?.size) return;
     const physics = this.ctx.peek('physics');
-    const tdm = this.settings.mode === 'tdm';
+    const tdm = isTeamMode(this.settings.mode);
     const live = this.rules?.state === 'live';
     const where = (id) => {
       if (id === this.me) {
@@ -457,7 +497,9 @@ export class PartySystem {
       }
       // small steps: a slow frame must not carry a bot through a wall
       let r = {};
-      if (live) for (let left = dt; left > 1e-6 && !r.fire; left -= 0.1) r = bot.update(Math.min(0.1, left), { enemies, los });
+      // king of the hill: with nobody in sight, bots head for the hill
+      const goal = this.settings.mode === 'koth' ? { x: HILL.x + ((id * 2.3) % 5) - 2.5, y: 0, z: HILL.z + ((id * 1.7) % 5) - 2.5 } : null;
+      if (live) for (let left = dt; left > 1e-6 && !r.fire; left -= 0.1) r = bot.update(Math.min(0.1, left), { enemies, los, goal });
       if (r.fire) {
         this.botShots = (this.botShots ?? 0) + 1;
         const seq = (bot._seq = (bot._seq ?? 0) + 1);
@@ -497,7 +539,7 @@ export class PartySystem {
   /** A spawn far from the living enemies of player `id` (and from spawns already handed out). */
   _pickSpawn(id, taken = {}) {
     const me = this.players.get(id);
-    const tdm = this.settings.mode === 'tdm';
+    const tdm = isTeamMode(this.settings.mode);
     const enemies = [];
     const pos = (pid) => {
       if (pid === this.me) {
@@ -593,7 +635,7 @@ export class PartySystem {
     for (const id of [...(opp?.party.keys() ?? [])]) if (!this.players.has(id)) opp.remove(id);
     if (this.phase === 'match' && opp) {
       const myTeam = this.players.get(this.me)?.team;
-      const tdm = this.settings.mode === 'tdm';
+      const tdm = isTeamMode(this.settings.mode);
       for (const p of this.players.values()) {
         if (p.id === this.me || opp.get(p.id)) continue;
         opp.add(p.id, { name: playerName(p.id), enemy: !tdm || p.team !== myTeam });
@@ -620,13 +662,16 @@ export class PartySystem {
     ctx.peek('world')?.load?.(this.settings.map);
     this._cands = spawnCandidates(MAPS[this.settings.map].layout, insideXZ);
     const me = this.players.get(this.me);
-    ctx.peek('weapons')?.setLoadout(me?.primary ?? 'rifle');
+    ctx.peek('weapons')?.setLoadout(this.settings.mode === 'gun' ? gunFor(0) : (me?.primary ?? 'rifle'));
+    this._showHill(this.settings.mode === 'koth');
+    this._holder = undefined;
+    this._paintHill(null);
     ctx.peek('weapons')?.refillAll?.();
     const player = ctx.peek('player');
     if (player?.health) player.health.regenEnabled = false;
     const opp = ctx.peek('opponent');
     opp.clearParty();
-    const tdm = this.settings.mode === 'tdm';
+    const tdm = isTeamMode(this.settings.mode);
     for (const p of this.players.values()) {
       if (p.id === this.me) continue;
       opp.add(p.id, { name: playerName(p.id), enemy: !tdm || p.team !== me?.team });
@@ -679,6 +724,7 @@ export class PartySystem {
   _teardownMatch() {
     this.live = false;
     this._bots = null;
+    this._showHill(false);
     this.ctx.peek('opponent')?.clearParty();
     this.ctx.peek('world')?.load?.('grid');
     const player = this.ctx.peek('player');
@@ -695,7 +741,9 @@ export class PartySystem {
     const player = ctx.peek('player');
     const ui = ctx.peek('ui');
     if (ev.type === 'countdown') {
-      ui?.banner?.show(this.settings.mode === 'tdm' ? 'Team deathmatch' : 'Free for all', `First to ${this.settings.scoreLimit}`);
+      const M = PARTY_MODES[this.settings.mode];
+      const goal = this.settings.mode === 'koth' ? `Hold the hill: first to ${this.settings.scoreLimit} points` : this.settings.mode === 'gun' ? 'A new gun every 2 kills: finish the ladder' : `First to ${this.settings.scoreLimit}`;
+      ui?.banner?.show(M?.label ?? 'Party', goal);
     } else if (ev.type === 'live') {
       this.live = true;
       player?.setControlEnabled?.(true);
@@ -707,6 +755,16 @@ export class PartySystem {
       this._teams = ev.teams ?? this._teams;
       this._hud();
       this.ui.feedKill({ killer: ev.killer, victim: ev.victim, weapon: ev.weapon, headshot: ev.headshot, me: this.me });
+      if (this.settings.mode === 'gun' && ev.killer !== ev.victim) {
+        const k = this._scores[ev.killer]?.[0] ?? 0;
+        const gun = gunFor(k);
+        if (ev.killer === this.me && gun !== gunFor(k - 1)) {
+          ctx.peek('weapons')?.setLoadout(gun);
+          ui?.banner?.show(gun.toUpperCase(), 'New gun');
+        }
+        const bot = this._bots?.get(ev.killer);
+        if (bot) bot.weapon = this._botWeapon(gun);
+      }
       if (ev.victim === this.me) {
         player?.setControlEnabled?.(false);
         this._deadUntil = performance.now() / 1000 + 3;
@@ -724,6 +782,16 @@ export class PartySystem {
         ctx.peek('weapons')?.refillAll?.();
         player?.setControlEnabled?.(true);
       }
+    } else if (ev.type === 'zone') {
+      this._teams = ev.teams ?? this._teams;
+      this._hud();
+      if (ev.holder !== this._holder) {
+        this._holder = ev.holder;
+        const mine = this.players.get(this.me)?.team;
+        this._paintHill(ev.holder == null ? null : ev.holder === mine);
+        if (ev.holder == null) ui?.banner?.show('Hill contested', '');
+        else ui?.banner?.show(ev.holder === mine ? 'Your team holds the hill' : 'The enemy holds the hill', '');
+      }
     } else if (ev.type === 'end') {
       this.live = false;
       this.phase = 'results';
@@ -736,7 +804,7 @@ export class PartySystem {
   _hud() {
     const ui = this.ctx.peek('ui');
     if (!ui?.state) return;
-    if (this.settings.mode === 'tdm') {
+    if (isTeamMode(this.settings.mode)) {
       const t = this.players.get(this.me)?.team ?? 0;
       ui.state.scoreUs = this._teams[t] ?? 0;
       ui.state.scoreThem = this._teams[1 - t] ?? 0;
@@ -925,7 +993,7 @@ export class PartySystem {
     const wallDt = Math.min(1, wall - (this._lastWall ?? wall));
     this._lastWall = wall;
     if (this.host && this.rules) {
-      this._hostEvents(this.rules.tick(wallDt));
+      this._hostEvents(this.rules.tick(wallDt, this.settings.mode === 'koth' ? { inZone: this._inZone() } : undefined));
       this._stepBots(wallDt, raw);
     }
     const ui = ctx.peek('ui');

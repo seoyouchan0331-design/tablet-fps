@@ -7,7 +7,7 @@
  */
 import { Loadout } from '../weapons/loadout.js';
 import { MAPS, MAP_IDS } from '../arena/layout.js';
-import { PARTY_MODES, TIME_LIMITS } from '../party/rules.js';
+import { PARTY_MODES, TIME_LIMITS, isTeamMode } from '../party/rules.js';
 import { BOT_LEVELS } from '../party/bots.js';
 import { el } from './util.js';
 
@@ -144,7 +144,7 @@ export class PartyUI {
       b.classList.toggle('on', s.settings.map === id);
       b.disabled = locked;
     }
-    const sl = set(s.settings.mode === 'tdm' ? 'TEAM KILLS TO WIN' : 'KILLS TO WIN');
+    const sl = set({ tdm: 'TEAM KILLS TO WIN', koth: 'HILL POINTS TO WIN', gun: 'KILLS (4 GUNS × 2)' }[s.settings.mode] ?? 'KILLS TO WIN');
     for (const n of PARTY_MODES[s.settings.mode].limits) {
       const b = this._btn(sl, String(n), `limit-${n}`, () => this.on.settings({ ...s.settings, scoreLimit: n }));
       b.classList.toggle('on', s.settings.scoreLimit === n);
@@ -163,14 +163,14 @@ export class PartyUI {
         this.showLobby(s);
       });
       b.classList.toggle('on', this.primary === id);
-      b.disabled = !!me?.ready;
+      b.disabled = !!me?.ready || s.settings.mode === 'gun'; // gun game hands out the guns
     }
     const list = el('div', 'ow-plist', this.root);
     list.dataset.act = 'players';
     for (const p of s.players) {
       const row = el('div', `p${p.id === s.me ? ' me' : ''}`, list);
-      el('span', `n${s.settings.mode === 'tdm' ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === 0 ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
-      if (s.settings.mode === 'tdm') el('span', `t${p.team}`, row, p.team === 0 ? 'CYAN' : 'ORANGE');
+      el('span', `n${isTeamMode(s.settings.mode) ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === 0 ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
+      if (isTeamMode(s.settings.mode)) el('span', `t${p.team}`, row, p.team === 0 ? 'CYAN' : 'ORANGE');
       el('span', p.ready ? 'ok' : '', row, p.ready ? 'READY' : '…');
     }
     if (s.players.some((p) => p.bot)) {
@@ -189,7 +189,7 @@ export class PartyUI {
       rem.disabled = !s.players.some((p) => p.bot) || !!me?.ready;
     }
     const row = el('div', 'row actions', this.root);
-    if (s.settings.mode === 'tdm') {
+    if (isTeamMode(s.settings.mode)) {
       const t = this._btn(row, 'SWITCH TEAM', 'switch-team', () => this.on.team(1 - (me?.team ?? 0)));
       t.disabled = !!me?.ready;
     }
@@ -205,7 +205,7 @@ export class PartyUI {
     this.board.hidden = true;
     this._clear();
     let title;
-    if (r.mode === 'tdm') {
+    if (isTeamMode(r.mode)) {
       const myTeam = r.standings.find((p) => p.id === r.me)?.team;
       title = r.winner == null ? 'DRAW' : r.winner === myTeam ? 'YOUR TEAM WINS' : 'YOUR TEAM LOSES';
       el('div', 'score', this.root, `${r.teams[0]} – ${r.teams[1]}`);
@@ -225,7 +225,7 @@ export class PartyUI {
     const head = el('tr', null, t);
     for (const h of ['PLAYER', 'K', 'D']) el('td', null, head, h);
     for (const p of standings) {
-      const tr = el('tr', `${p.id === me ? 'me ' : ''}${mode === 'tdm' ? 't' + p.team : ''}`, t);
+      const tr = el('tr', `${p.id === me ? 'me ' : ''}${isTeamMode(mode) ? 't' + p.team : ''}`, t);
       el('td', null, tr, playerName(p.id));
       el('td', null, tr, String(p.kills));
       el('td', null, tr, String(p.deaths));
@@ -236,7 +236,7 @@ export class PartyUI {
   /** Scoreboard overlay (while dead, or on demand). */
   showBoard({ standings, teams, mode, me, sub = '' }) {
     this.board.replaceChildren();
-    el('h3', null, this.board, mode === 'tdm' ? `CYAN ${teams[0]} – ${teams[1]} ORANGE` : 'SCORES');
+    el('h3', null, this.board, isTeamMode(mode) ? `CYAN ${teams[0]} – ${teams[1]} ORANGE` : 'SCORES');
     this._table(this.board, standings, me, mode);
     if (sub) el('div', 'sub', this.board, sub).dataset.act = 'respawn-in';
     this.board.hidden = false;

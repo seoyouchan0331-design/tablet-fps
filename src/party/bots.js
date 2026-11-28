@@ -206,7 +206,8 @@ export class Bot {
 
   /**
    * @param {number} dt
-   * @param {{enemies:{id:number,x:number,y:number,z:number}[], los:(a:object,b:object)=>boolean}} w
+   * @param {{enemies:{id:number,x:number,y:number,z:number}[], los:(a:object,b:object)=>boolean, goal?:{x:number,y:number,z:number}|null}} w
+   *   goal: where to go when nobody is in sight (the hill); default the nearest enemy
    * @returns {{fire?:{target:number, hit:boolean, head:boolean, from:number[]}}}
    */
   update(dt, w) {
@@ -249,8 +250,8 @@ export class Bot {
     this._replan -= dt;
     if (!this.path?.length || this._replan <= 0) {
       this._replan = 1 + this.rng() * 0.5;
-      let goal = null, gd = Infinity;
-      for (const e of w.enemies) {
+      let goal = w.goal ?? null, gd = goal ? 0 : Infinity;
+      if (!goal) for (const e of w.enemies) {
         const d = Math.hypot(e.x - this.x, e.z - this.z);
         if (d < gd) { gd = d; goal = e; }
       }

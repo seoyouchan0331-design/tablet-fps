@@ -5,25 +5,42 @@
  *   countdown (3 s) -> live -> end   (score limit reached, or time up)
  *
  * Modes:
- *   ffa  every player for themselves; first to `scoreLimit` kills wins
- *   tdm  two teams (0, 1); first team to `scoreLimit` kills wins; no
- *        friendly fire
+ *   ffa   every player for themselves; first to `scoreLimit` kills wins
+ *   tdm   two teams (0, 1); first team to `scoreLimit` kills wins; no
+ *         friendly fire
+ *   koth  two teams; a team alone in the hill (the zone in the middle)
+ *         scores a point a second; first to `scoreLimit` points wins
+ *   gun   gun game: every player for themselves; the primary changes
+ *         every 2 kills along GUN_LADDER; the first to finish it wins
  * A dead player respawns after `respawn` seconds and can't be hurt for
  * `protect` seconds after that. Events returned for the host to broadcast:
  *   { type: 'countdown', time } | { type: 'live', time }
  *   { type: 'kill', killer, victim, scores }
  *   { type: 'respawn', id }
+ *   { type: 'zone', teams, holder }  (koth: a point scored, or the hill changed hands)
  *   { type: 'end', winner, standings, teams }
  */
 export const PARTY_MODES = {
   ffa: { label: 'FREE FOR ALL', limits: [10, 20, 30], def: 20 },
-  tdm: { label: 'TEAM DEATHMATCH', limits: [20, 40, 60], def: 40 },
+  tdm: { label: 'TEAM DEATHMATCH', limits: [20, 40, 60], def: 40, team: true },
+  koth: { label: 'KING OF THE HILL', limits: [60, 100, 150], def: 100, team: true, unit: 'POINTS' },
+  gun: { label: 'GUN GAME', limits: [8], def: 8 },
 };
+export const isTeamMode = (mode) => !!PARTY_MODES[mode]?.team;
+/** Gun game: the primary for a number of kills (2 kills a step). */
+export const GUN_LADDER = ['rifle', 'smg', 'shotgun', 'sniper'];
+export const gunFor = (kills) => GUN_LADDER[Math.min(GUN_LADDER.length - 1, Math.floor(kills / 2))];
+/** The hill: a circle round the middle of the map. */
+export const HILL = { x: 0, z: 0, r: 7, h: 4 };
 export const TIME_LIMITS = [300, 600];
 
 export class Deathmatch {
   constructor({ mode = 'ffa', scoreLimit = 20, timeLimit = 300, respawn = 3, protect = 1.5, countdown = 3 } = {}) {
-    this.mode = mode === 'tdm' ? 'tdm' : 'ffa';
+    this.mode = PARTY_MODES[mode] ? mode : 'ffa';
+    this.team = isTeamMode(this.mode);
+    this.zone = [0, 0];
+    this.holder = null;
+    this._zoneAcc = 0;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
     this.respawnDelay = respawn;
@@ -39,7 +56,10 @@ export class Deathmatch {
   /** @param {{id:number, team?:number}[]} roster */
   start(roster) {
     this.players.clear();
-    for (const p of roster) this.players.set(p.id, { id: p.id, team: this.mode === 'tdm' ? (p.team ?? 0) : p.id, kills: 0, deaths: 0, alive: true, respawnAt: 0, safeUntil: 0 });
+    for (const p of roster) this.players.set(p.id, { id: p.id, team: this.team ? (p.team ?? 0) : p.id, kills: 0, deaths: 0, alive: true, respawnAt: 0, safeUntil: 0 });
+    this.zone = [0, 0];
+    this.holder = null;
+    this._zoneAcc = 0;
     this.clock = 0;
     this.state = 'countdown';
     this.timeLeft = this.countdown;
@@ -54,8 +74,9 @@ export class Deathmatch {
   }
 
   teamScores() {
+    if (this.mode === 'koth') return [...this.zone];
     const t = [0, 0];
-    if (this.mode === 'tdm') for (const p of this.players.values()) t[p.team] += p.kills;
+    if (this.team) for (const p of this.players.values()) t[p.team] += p.kills;
     return t;
   }
 
@@ -64,7 +85,7 @@ export class Deathmatch {
     if (this.state !== 'live' || shooter === target) return false;
     const a = this.players.get(shooter), b = this.players.get(target);
     if (!a || !b || !a.alive || !b.alive) return false;
-    if (this.mode === 'tdm' && a.team === b.team) return false;
+    if (this.team && a.team === b.team) return false;
     return this.clock >= b.safeUntil;
   }
 
@@ -77,7 +98,8 @@ export class Deathmatch {
     const k = this.players.get(killer);
     if (k && killer !== victim) k.kills++;
     const out = [{ type: 'kill', killer, victim, scores: this.scores(), teams: this.teamScores() }];
-    const lead = this.mode === 'tdm' ? Math.max(...this.teamScores()) : (k?.kills ?? 0);
+    if (this.mode === 'koth') return out; // the hill scores, not kills
+    const lead = this.team ? Math.max(...this.teamScores()) : (k?.kills ?? 0);
     if (lead >= this.scoreLimit) out.push(this._end());
     return out;
   }
@@ -85,18 +107,22 @@ export class Deathmatch {
   /** A player joined mid-match: they come in dead and respawn within a moment. */
   add(id, team = 0) {
     if (this.players.has(id) || this.state === 'idle' || this.state === 'end') return;
-    this.players.set(id, { id, team: this.mode === 'tdm' ? team : id, kills: 0, deaths: 0, alive: false, respawnAt: this.clock + 0.5, safeUntil: 0 });
+    this.players.set(id, { id, team: this.team ? team : id, kills: 0, deaths: 0, alive: false, respawnAt: this.clock + 0.5, safeUntil: 0 });
   }
 
   /** A player left: drop them; the match ends if fewer than 2 remain (or one team is empty). */
   remove(id) {
     if (!this.players.delete(id) || this.state === 'idle' || this.state === 'end') return [];
     const teams = new Set([...this.players.values()].map((p) => p.team));
-    if (this.players.size < 2 || (this.mode === 'tdm' && teams.size < 2)) return [this._end()];
+    if (this.players.size < 2 || (this.team && teams.size < 2)) return [this._end()];
     return [];
   }
 
-  tick(dt) {
+  /**
+   * @param {number} dt
+   * @param {{inZone?:number[]}} [w]  koth: living players of each team inside the hill
+   */
+  tick(dt, w = {}) {
     if (this.state === 'idle' || this.state === 'end') return [];
     this.clock += dt;
     this.timeLeft -= dt;
@@ -116,6 +142,26 @@ export class Deathmatch {
         out.push({ type: 'respawn', id: p.id });
       }
     }
+    if (this.mode === 'koth') {
+      const [a, b] = w.inZone ?? [0, 0];
+      const holder = a > 0 && !b ? 0 : b > 0 && !a ? 1 : null;
+      if (holder !== this.holder) {
+        this.holder = holder;
+        this._zoneAcc = 0;
+        out.push({ type: 'zone', teams: [...this.zone], holder });
+      } else if (holder != null) {
+        this._zoneAcc += dt;
+        while (this._zoneAcc >= 1) {
+          this._zoneAcc -= 1;
+          this.zone[holder]++;
+          out.push({ type: 'zone', teams: [...this.zone], holder });
+          if (this.zone[holder] >= this.scoreLimit) {
+            out.push(this._end());
+            return out;
+          }
+        }
+      }
+    }
     if (this.timeLeft <= 1e-9) out.push(this._end());
     return out;
   }
@@ -132,7 +178,7 @@ export class Deathmatch {
     const st = this.standings();
     const teams = this.teamScores();
     let winner = null;
-    if (this.mode === 'tdm') winner = teams[0] === teams[1] ? null : teams[0] > teams[1] ? 0 : 1;
+    if (this.team) winner = teams[0] === teams[1] ? null : teams[0] > teams[1] ? 0 : 1;
     else if (st.length && (st.length < 2 || st[0].kills > st[1].kills)) winner = st[0].id;
     this.winner = winner;
     return { type: 'end', winner, standings: st, teams };

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Deathmatch, spawnCandidates, pickSpawn } from '../src/party/rules.js';
+import { Deathmatch, spawnCandidates, pickSpawn, gunFor } from '../src/party/rules.js';
 import { MAPS } from '../src/arena/layout.js';
 import { insideXZ } from '../src/arena/shapes.js';
 
@@ -85,4 +85,35 @@ test('spawn candidates are open ground on every map; spawns avoid enemies', () =
   assert.ok(near > 30, `spawned ${near.toFixed(1)} m from the only enemy`);
   // team side
   for (let i = 0; i < 20; i++) assert.ok(pickSpawn(c, [], { side: -1 }).x < 0);
+});
+
+test('king of the hill: a team alone in the hill scores a point a second; contested scores nothing', () => {
+  const dm = new Deathmatch({ mode: 'koth', scoreLimit: 3, timeLimit: 100 });
+  dm.start([{ id: 0, team: 0 }, { id: 1, team: 1 }]);
+  live(dm);
+  assert.equal(dm.tick(0.1, { inZone: [1, 0] })[0].holder, 0, 'team 0 takes the hill');
+  dm.tick(1.0, { inZone: [1, 0] });
+  assert.deepEqual(dm.teamScores(), [1, 0]);
+  assert.equal(dm.tick(0.1, { inZone: [1, 1] })[0].holder, null, 'contested');
+  dm.tick(5, { inZone: [1, 1] });
+  assert.deepEqual(dm.teamScores(), [1, 0], 'no points while contested');
+  assert.deepEqual(dm.kill(0, 1).map((e) => e.type), ['kill'], 'kills do not end a hill match');
+  dm.tick(0.1, { inZone: [1, 0] });
+  const ev = dm.tick(2.0, { inZone: [1, 0] });
+  assert.equal(ev.at(-1).type, 'end');
+  assert.equal(ev.at(-1).winner, 0);
+});
+
+test('gun game: the weapon steps up every 2 kills; finishing the ladder wins', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map(gunFor), ['rifle', 'rifle', 'smg', 'smg', 'shotgun', 'shotgun', 'sniper', 'sniper']);
+  const dm = new Deathmatch({ mode: 'gun', scoreLimit: 8 });
+  dm.start([{ id: 0 }, { id: 1 }]);
+  live(dm);
+  let ev = [];
+  for (let i = 0; i < 8; i++) {
+    ev = dm.kill(0, 1);
+    dm.tick(3.1);
+  }
+  assert.equal(ev.at(-1).type, 'end');
+  assert.equal(ev.at(-1).winner, 0);
 });
