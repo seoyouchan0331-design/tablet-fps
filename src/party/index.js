@@ -1261,6 +1261,12 @@ export class PartySystem {
     const id = e?.target?.remoteId;
     if (!e || e.confirmed || !Number.isInteger(id) || this.phase !== 'match') return;
     e.killed = false; // the host decides kills
+    // a teammate (no friendly fire): nothing to claim, no damage shown
+    const tgt = this.players.get(id), mine = this.players.get(this.me);
+    if (isTeamMode(this.settings.mode) && tgt && mine && tgt.team === mine.team) {
+      e.amount = 0;
+      return;
+    }
     if (!this.live) return;
     const eye = this.ctx.peek('player')?.eyePosition;
     const claim = {

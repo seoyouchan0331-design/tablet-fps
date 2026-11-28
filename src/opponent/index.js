@@ -106,6 +106,8 @@ export class OpponentSystem {
     if (old) this.remove(id);
     const r = new Remote(this.ctx, this.model, { id, name, enemy });
     r.avatar.hide();
+    // teammates can't be hit (no friendly fire): my bullets pass through them
+    r.avatar.noHit = !enemy;
     this.party.set(id, r);
     return r;
   }

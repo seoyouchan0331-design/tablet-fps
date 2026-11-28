@@ -64,14 +64,15 @@ export function parapet({ x0, z0, x1, z1, y0 = 0, h = COVER, t = 0.3, posts = 0 
  * floor: an open gallery behind a balustrade, piers holding a flat roof.
  * One straight stair climbs to the gallery at its +x end, along the back.
  */
-export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2 }) {
+export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2, wallAt0 = false }) {
+  // wallAt0: a house wall closes the -x end (no end pier sunk into it, the roof stops at it)
   const BW = 3.6, L = bays * BW, x0 = x - L / 2, x1 = x + L / 2;
   const out = [];
   for (let i = 0; i < bays; i++) out.push(prop('archbay', x0 + BW * (i + 0.5), zf + 0.4, Math.PI));
   // gallery floor, its glowing fascia, the back wall up to the roof
   out.push({ x, y: fh - 0.15, z: (zf + zb) / 2, w: L, h: 0.3, d: zb - zf, noEdge: true });
   out.push({ x, y: fh - 0.12, z: zf - 0.04, w: L + 0.1, h: 0.18, d: 0.08 });
-  out.push({ x, y: (fh + top + 0.25) / 2, z: zb - 0.2, w: L, h: top + 0.25 - fh, d: 0.4, noEdge: true });
+  out.push({ x, y: (fh + top) / 2, z: zb - 0.2, w: L, h: top - fh, d: 0.4, noEdge: true }); // up to the roof's underside
   // balustrade (drawn per metre; one hidden wall is what stops players and bullets)
   for (let k = 0; k < L; k++) out.push(prop('balustrade', x0 + k + 0.5, zf + 0.2, 0, fh, { deco: true }));
   out.push({ x, y: fh + COVER / 2, z: zf + 0.2, w: L, h: COVER, d: 0.34, hidden: true });
@@ -82,10 +83,11 @@ export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2 }) {
   const endLen = zs - (zf + 0.4);
   out.push(prop('balustrade', x1 - 0.18, (zf + 0.4 + zs) / 2, Math.PI / 2, fh, { sx: endLen, deco: true }));
   out.push({ x: x1 - 0.18, y: fh + COVER / 2, z: (zf + 0.4 + zs) / 2, w: 0.34, h: COVER, d: endLen, hidden: true });
-  for (let i = 0; i <= bays; i++) out.push({ ...prop('pier', x0 + BW * i, zf + 0.37, 0, fh), noEdge: true });
+  for (let i = wallAt0 ? 1 : 0; i <= bays; i++) out.push({ ...prop('pier', x0 + BW * i, zf + 0.37, 0, fh), noEdge: true });
   // roof and cornice
-  out.push({ x, y: top + 0.125, z: (zf - 0.3 + zb) / 2, w: L + 0.6, h: 0.25, d: zb - zf + 0.3 });
-  out.push(prop('cornice', x, zf - 0.3, Math.PI, top + 0.25, { sx: L + 0.6, deco: true }));
+  const r0 = wallAt0 ? x0 : x0 - 0.3, r1 = x1 + 0.3;
+  out.push({ x: (r0 + r1) / 2, y: top + 0.125, z: (zf - 0.3 + zb) / 2, w: r1 - r0, h: 0.25, d: zb - zf + 0.3 });
+  out.push(prop('cornice', (r0 + r1) / 2, zf - 0.3, Math.PI, top + 0.25, { sx: r1 - r0, deco: true }));
   out.push(...flight({ x: x1 + 5.6, z: zs + 0.8, dir: '-x', rise: fh, rails: 'right' })); // rail on the plaza side
   return out;
 }

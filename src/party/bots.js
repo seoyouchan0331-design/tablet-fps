@@ -85,14 +85,14 @@ export function buildNav(layout) {
       let last = -Infinity; // (floors can be below 0: a sunken canal)
       for (const h of tops) {
         if (h - last < 0.1) continue;
-        last = h;
         const blocked = near.some((b) => {
           if (!insideXZ(b, x, z, BODY)) return false;
           const bottom = b.y - b.h / 2;
           const top = b.ramp ? surfaceNear(b, x, z) : b.y + b.h / 2;
           return bottom < h + HEAD && top > h + 0.08;
         });
-        if (blocked) continue;
+        if (blocked) continue; // (a blocked level leaves room for one just above it: a ramp's foot)
+        last = h;
         const id = nodes.length;
         nodes.push({ x, y: h, z, cell: r * cols + c });
         cells[r * cols + c].push(id);
@@ -112,6 +112,35 @@ export function buildNav(layout) {
         if (dr && dc && (levelNear(c + dc, r, y) == null || levelNear(c, r + dr, y) == null)) continue; // no corner cutting
         edges[i].push(j);
       }
+    }
+  }
+  // a stair's foot: the grid is too coarse to see a player stepping onto
+  // the low end of a ramp from beside it (a stair against a wall, its foot
+  // cell crowded by the wall). Link the ground beside the low end to the
+  // first steps, where nothing solid stands between them.
+  const link = (i, j) => { if (!edges[i].includes(j)) { edges[i].push(j); edges[j].push(i); } };
+  for (const b of solid) {
+    if (!b.ramp || b.ry) continue;
+    const low = b.y - b.h / 2;
+    const r0 = cellOf({ hx, hz, cols, rows }, b.x - b.w / 2 - 2, b.z - b.d / 2 - 2);
+    const r1 = cellOf({ hx, hz, cols, rows }, b.x + b.w / 2 + 2, b.z + b.d / 2 + 2);
+    const on = [], off = [];
+    for (let r = r0.r; r <= r1.r; r++) for (let c = r0.c; c <= r1.c; c++) for (const i of cells[r * cols + c]) {
+      const n = nodes[i];
+      if (insideXZ(b, n.x, n.z, 0)) { if (n.y > low + 0.05 && n.y <= low + CLIMB) on.push(i); }
+      else if (Math.abs(n.y - low) < 0.2) off.push(i);
+    }
+    for (const i of on) for (const j of off) {
+      const A = nodes[i], B = nodes[j];
+      const len = Math.hypot(A.x - B.x, A.z - B.z);
+      if (len > 2.3) continue;
+      const my = Math.max(A.y, B.y);
+      let clear = true;
+      for (let t = 0.1; t < 0.95 && clear; t += 0.1) {
+        const px = A.x + (B.x - A.x) * t, pz = A.z + (B.z - A.z) * t;
+        clear = !solid.some((o) => o !== b && insideXZ(o, px, pz, 0.15) && o.y - o.h / 2 < my + HEAD && (o.ramp ? topAt(o, px, pz) : o.y + o.h / 2) > my + 0.3);
+      }
+      if (clear) link(i, j);
     }
   }
   return { hx, hz, cols, rows, nodes, cells, edges };

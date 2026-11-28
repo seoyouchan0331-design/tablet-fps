@@ -460,7 +460,7 @@ export class Avatar {
   setAlive(alive) {
     const was = this.alive;
     this.alive = alive;
-    for (const c of this.colliders) c.enabled = alive;
+    for (const c of this.colliders) c.enabled = alive && !this.noHit; // a teammate: bullets pass through
     if (alive) {
       this.root.visible = true;
       if (!was) this._prev.copy(this.position);

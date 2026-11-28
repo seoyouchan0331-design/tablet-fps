@@ -112,6 +112,21 @@ const mp = await p.evaluate(async () => {
 });
 console.log('health pack in a match:', JSON.stringify(mp));
 if (mp.hp < 79 || mp.bar < 79) fail('the host did not heal me from the pack');
+// team deathmatch: a teammate's body takes no bullets (no hit marker, no damage), an enemy's does
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').startSolo({ mode: 'tdm', map: 'town', bots: 3 }));
+await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party').live === true, null, { timeout: 120000, polling: 500 });
+const ff = await p.evaluate(() => {
+  const e = window.__ENGINE__.ctx; const P = e.peek('party'); const O = e.peek('opponent');
+  const mine = P.players.get(P.me).team;
+  return [...P.players.values()].filter((x) => x.id !== P.me).map((x) => ({
+    team: x.team === mine ? 'mate' : 'enemy',
+    hittable: (O.get(x.id)?.avatar.colliders ?? []).some((c) => c.enabled),
+  }));
+});
+console.log('tdm colliders:', JSON.stringify(ff));
+if (!ff.some((x) => x.team === 'mate') || ff.some((x) => x.team === 'mate' && x.hittable)) fail('a teammate can be hit');
+if (ff.some((x) => x.team === 'enemy' && !x.hittable)) fail('an enemy cannot be hit');
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').leave());
 await p.evaluate(() => window.__ENGINE__.ctx.peek('party').startSolo({ mode: 'ffa', map: 'town', bots: 3 }));
 await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party').live === true, null, { timeout: 120000, polling: 500 });
 await click('party-kill');

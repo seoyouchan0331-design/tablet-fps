@@ -169,7 +169,7 @@ const TX = TOWN_W / 2 - 1;
 const TERRACE_FRONT = -16;
 const TOWN_HALF = [
   // arcade on the north side, its stair at the +x end
-  ...arcade({ x: 0, zf: 18.8, zb: TZ }),
+  ...arcade({ x: 0, zf: 18.8, zb: TZ, wallAt0: true }),
   // the house at the arcade's -x end: its upper door is the gallery's second way out
   ...building({
     x: -13.2, z: 19, w: 8.4, d: 8, stair: '-x', ornate: true,
