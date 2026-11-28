@@ -29,12 +29,64 @@ const BR = 7; // plaza bridge half-width (along z)
 const GATE = 15; // lock gates at z = +-GATE
 const FOOT = 23; // footbridges at z = +-FOOT
 const STAIR_X = CW - 0.85; // stairs run along the canal wall
+const SLAB = 0.6; // the quay street's thickness over a tunnel
+
+// The tunnel under this (+x) quay: from a mouth in the canal wall at the -z
+// end, under the street and the end house, up a stair into the back street.
+// It is the canal's reason to exist: the only way behind the other side's
+// houses (each side's twin opens at the other end).
+const TUN = { z0: -27.5, z1: -24.5, x0: QX, x1: 27.6, pit: 22 }; // pit: where the stair up starts
+
+/** Axis-aligned rectangle [x0,x1] x [z0,z1] minus holes -> rectangles covering the rest. */
+function rectMinus(r, holes) {
+  const zs = [...new Set([r.z0, r.z1, ...holes.flatMap((h) => [h.z0, h.z1])])].filter((v) => v >= r.z0 && v <= r.z1).sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i + 1 < zs.length; i++) {
+    const z0 = zs[i], z1 = zs[i + 1], zm = (z0 + z1) / 2;
+    const cut = holes.filter((h) => zm > h.z0 && zm < h.z1).sort((a, b) => a.x0 - b.x0);
+    let x = r.x0;
+    for (const h of cut) {
+      if (h.x0 > x) out.push({ x0: x, x1: h.x0, z0, z1 });
+      x = Math.max(x, h.x1);
+    }
+    if (x < r.x1) out.push({ x0: x, x1: r.x1, z0, z1 });
+  }
+  return out;
+}
+const slab = (q, y0, y1, extra) => ({ x: (q.x0 + q.x1) / 2, y: (y0 + y1) / 2, z: (q.z0 + q.z1) / 2, w: q.x1 - q.x0, h: y1 - y0, d: q.z1 - q.z0, ...extra });
+
+/** The quay: a street slab on top (with the stair pit open), solid below except the tunnel. */
+function quay() {
+  const all = { x0: QX, x1: H, z0: -H, z1: H };
+  const tunnel = { x0: TUN.x0, x1: TUN.x1, z0: TUN.z0, z1: TUN.z1 };
+  const pit = { x0: TUN.pit, x1: TUN.x1, z0: TUN.z0, z1: TUN.z1 };
+  return [
+    // (no neon on these: the pieces' seams would draw lines across the street)
+    ...rectMinus(all, [pit]).map((q) => slab(q, -SLAB, 0, { floor: true, noEdge: true })),
+    ...rectMinus(all, [tunnel]).map((q) => slab(q, -DEEP, -SLAB, { floor: true, noEdge: true })), // ground mass under the street
+    slab(tunnel, -DEEP - 0.5, -DEEP, { floor: true, noEdge: true }), // the tunnel's own floor
+    // guide lights along the tunnel's ceiling corners, and the quay's edge line
+    slab({ x0: TUN.x0, x1: TUN.pit, z0: TUN.z0, z1: TUN.z0 + 0.06 }, -SLAB - 0.06, -SLAB),
+    slab({ x0: TUN.x0, x1: TUN.pit, z0: TUN.z1 - 0.06, z1: TUN.z1 }, -SLAB - 0.06, -SLAB),
+  ];
+}
 
 /** The quay +x side and everything on it; the -x side is its 180-degree twin. */
 const HALF = [
-  // quay slab (a floor: its top is the street) and the canal's retaining wall
-  { x: (QX + H) / 2, y: -DEEP / 2, z: 0, w: H - QX, h: DEEP, d: S, floor: true },
-  { x: CW + RW / 2, y: -DEEP / 2, z: 0, w: RW, h: DEEP, d: S - 2, noEdge: true },
+  // the quay (street slab, solid body, the tunnel carved out) and the canal's
+  // retaining wall, open at the tunnel's mouth
+  ...quay(),
+  slab({ x0: CW, x1: QX, z0: -H + 1, z1: TUN.z0 }, -DEEP, 0, { noEdge: true }),
+  slab({ x0: CW, x1: QX, z0: TUN.z1, z1: H - 1 }, -DEEP, 0, { noEdge: true }),
+  slab({ x0: CW, x1: QX, z0: TUN.z0, z1: TUN.z1 }, -SLAB, 0, { noEdge: true }), // lintel
+  // the mouth's glowing frame
+  { x: CW - 0.03, y: -DEEP / 2 - SLAB / 2, z: TUN.z0 + 0.08, w: 0.06, h: DEEP - SLAB, d: 0.16 },
+  { x: CW - 0.03, y: -DEEP / 2 - SLAB / 2, z: TUN.z1 - 0.08, w: 0.06, h: DEEP - SLAB, d: 0.16 },
+  { x: CW - 0.03, y: -SLAB - 0.08, z: (TUN.z0 + TUN.z1) / 2, w: 0.06, h: 0.16, d: TUN.z1 - TUN.z0 },
+  // the stair up into the back street, and rails round its pit
+  ...flight({ x: TUN.pit, z: (TUN.z0 + TUN.z1) / 2, dir: '+x', y0: -DEEP, rise: DEEP }),
+  ...parapet({ x0: TUN.pit, z0: TUN.z1 + 0.15, x1: TUN.x1, z1: TUN.z1 + 0.15, y0: 0, h: 1.0, posts: 3 }),
+  ...parapet({ x0: TUN.pit, z0: TUN.z0 - 0.15, x1: TUN.x1, z1: TUN.z0 - 0.15, y0: 0, h: 1.0, posts: 3 }),
 
   // four stairs from the canal floor up to this quay. All climb toward -z: the
   // drawn flight's side wall then stands on the canal side (a rail), and the
@@ -51,7 +103,7 @@ const HALF = [
   ].flatMap(([a, b]) => parapet({ x0: CW + 0.2, z0: a, x1: CW + 0.2, z1: b, y0: 0, h: 1.0, posts: 5 })),
 
   // blind arches on the canal wall where no stair runs (drawn only)
-  ...[-27.5, -24.2, -3.5, 3.5, 24.2, 27.5].map((z) => prop('blindarch', CW, z, -Math.PI / 2, -DEEP, { deco: true })),
+  ...[-21.5 + 0.2, -3.5, 3.5, 24.2, 27.5].filter((z) => z > -21).map((z) => prop('blindarch', CW, z, -Math.PI / 2, -DEEP, { deco: true })),
 
   // houses facing the canal across the quay street (doors on the street and the back)
   ...building({

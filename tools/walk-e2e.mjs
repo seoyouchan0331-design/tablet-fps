@@ -24,6 +24,7 @@ const CANAL_ROUTES = {
   // down a stair into the canal, under the bridge's middle arch, through the
   // lock gate's doorway, back up a stair on the far quay
   canalfloor: { start: [9, -12.2], path: [[6.9, -12.2], [5.15, -12.6], [5.15, -7.8], [3.5, -8.2], [0, -8.2], [0, 8], [0, 14], [0, 16.4], [-5.15, 16.2], [-5.15, 20.6], [-7.5, 20.4], [-9, 20.4]], y: 0 },
+  tunnel: { start: [0, -20, -3.15], path: [[2.5, -26], [8, -26], [21, -26], [27.3, -26], [29.5, -26]], y: 0 },
   plazabridge: { start: [9, 0], path: [[3, 0], [-3, 0], [-9, 0]], y: 0 },
   footbridge: { start: [9, 23], path: [[0, 23], [-9, 23]], y: 0 },
   gatewalk: { start: [8, 15], path: [[0, 15], [-8, 15]], y: 0 },

@@ -69,15 +69,17 @@ export function buildNav(layout) {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const x = -hx + c * STEP, z = -hz + r * STEP;
-      const near = solid.filter((b) => insideXZ(b, x, z, BODY + 0.5));
-      // the floor here (a map may have several at different heights: a sunken canal)
-      let ground = -Infinity;
-      for (const f of floors) if (insideXZ(f, x, z, 0)) ground = Math.max(ground, f.y + f.h / 2);
-      const tops = [Number.isFinite(ground) ? ground : 0];
+      // floors count as solid for headroom (a street slab over a tunnel)
+      const near = [...solid, ...floors].filter((b) => insideXZ(b, x, z, BODY + 0.5));
+      // every floor here is a level (a map may stack them: a tunnel under a street)
+      const tops = [];
+      for (const f of floors) if (insideXZ(f, x, z, 0)) tops.push(f.y + f.h / 2);
+      if (!tops.length) tops.push(0);
+      const ground = Math.min(...tops);
       for (const b of near) {
         if (!insideXZ(b, x, z, 0)) continue;
         const h = b.ramp ? topAt(b, x, z) : b.y + b.h / 2;
-        if (h > tops[0] + 0.05 && h < 12) tops.push(h);
+        if (h > ground + 0.05 && h < 12) tops.push(h);
       }
       tops.sort((a, b) => a - b);
       let last = -Infinity; // (floors can be below 0: a sunken canal)

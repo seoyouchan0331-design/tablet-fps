@@ -180,6 +180,8 @@ test('canal: quays at 0 m, the canal floor at -3.2 m; every crossing and stair i
     footbridge: { x: 0, y: 0, z: 23 },
     'far quay': { x: -27, y: 0, z: 0 },
     'tower top': { x: 25.5, y: 6.4, z: 24 },
+    'tunnel under the quay': { x: 15.5, y: -3.2, z: -26 },
+    'tunnel exit in the back street': { x: 29.5, y: 0, z: -26 },
   })) {
     const p = at(to.x, to.y, to.z);
     assert.ok(p?.length, `${name}: no path`);
@@ -189,4 +191,11 @@ test('canal: quays at 0 m, the canal floor at -3.2 m; every crossing and stair i
   // spawns happen on both levels
   const pts = spawnPoints(g);
   assert.ok(pts.some((p) => p.y === 0) && pts.some((p) => p.y === -3.2), 'spawn points on the quays and in the canal');
+});
+
+test('canal: the tunnel is the way from the canal into the back street (spawn side)', () => {
+  const g = buildNav(MAPS.canal.layout);
+  const p = findPath(g, { x: 0, y: -3.2, z: -20 }, { x: 29.5, y: 0, z: -26 });
+  assert.ok(p?.length, 'no path');
+  assert.ok(p.some((w) => w.x > 10 && w.y < -3), 'the path goes through the tunnel');
 });
