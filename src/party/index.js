@@ -73,6 +73,7 @@ export class PartySystem {
     this._hitCount = new Map(); // `${id}:${seq}` -> hits taken
     this._latest = new Map(); // host: id -> newest state
     this._fresh = new Map(); // host: states received since the last batch
+    this._seen = new Map(); // everyone: the newest state seen of each player (a takeover starts from it)
     this._clocks = new Map(); // id -> ClockSync
     this._stateAcc = 0;
     this._v1 = new THREE.Vector3();
@@ -119,16 +120,9 @@ export class PartySystem {
       if (this.phase === 'connecting') this._exit(ERRORS[err.message] ?? String(err.message));
       return;
     }
-    const hub = this.link;
-    this._heard = new Map();
-    hub.onJoin((peer) => this._hostJoin(peer));
-    hub.onLeave((peer) => this._hostLeave(peer));
-    hub.onMessage((peer, m) => {
-      const id = this._idOf(peer);
-      if (id == null) return;
-      this._heard.set(id, performance.now() / 1000);
-      this._hostMessage(id, m);
-    });
+    this.gen = 0;
+    this.hostId = 0;
+    this._wireHub(this.link);
     this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName() });
     this.phase = 'lobby';
     this._broadcastRoster();
@@ -147,7 +141,26 @@ export class PartySystem {
       if (this.phase === 'connecting') this._exit(ERRORS[err.message] ?? String(err.message));
       return;
     }
-    const link = this.link;
+    this.gen = 0;
+    this.hostId = 0;
+    this._wireGuest(this.link);
+    this.phase = 'lobby';
+  }
+
+  _wireHub(hub) {
+    this._heard = new Map();
+    hub.onJoin((peer) => this._hostJoin(peer));
+    hub.onLeave((peer) => this._hostLeave(peer));
+    hub.onMessage((peer, m) => {
+      if (m?.type === 'p.rejoin') return this._hostRejoin(peer, m);
+      const id = this._idOf(peer);
+      if (id == null) return;
+      this._heard.set(id, performance.now() / 1000);
+      this._hostMessage(id, m);
+    });
+  }
+
+  _wireGuest(link) {
     this._lastHeard = performance.now() / 1000;
     link.onMessage((m) => {
       this._lastHeard = performance.now() / 1000;
@@ -156,13 +169,129 @@ export class PartySystem {
     link.onClose(() => {
       if (this.link !== link) return;
       this.link = null;
-      this._exit('The host left the party.');
+      this._hostLost();
     });
     setTimeout(() => link.route?.().then((r) => { this.route = r; }), 1500);
-    this.phase = 'lobby';
+  }
+
+  // ------------------------------------------------------- host migration --
+  /**
+   * The host is gone. The remaining human with the lowest id takes over:
+   * it re-opens the room under the next generation of the code and picks
+   * the match up from what everybody knew (scores, clock, who is alive,
+   * bots where they were last seen); the others reconnect to it and keep
+   * their ids. If the chosen one never shows up, the next in line tries.
+   */
+  async _hostLost() {
+    if (this._migrating || this.phase === 'off') return;
+    this._migrating = true;
+    const old = this.hostId;
+    this.players.delete(old);
+    this.ctx.peek('opponent')?.remove(old);
+    this.alive[old] = false;
+    const line = [...this.players.values()].filter((p) => !p.bot).map((p) => p.id).sort((a, b) => a - b);
+    const gen = (this.gen ?? 0) + 1;
+    const ui = this.ctx.peek('ui');
+    for (const next of line) {
+      if (this.phase === 'off') break;
+      if (next === this.me) {
+        ui?.banner?.show('The host left', 'You are the new host');
+        if (await this._becomeHost(gen)) {
+          this._migrating = false;
+          return;
+        }
+        break;
+      }
+      ui?.banner?.show('The host left', `${playerName(next)} takes over…`);
+      if (await this._rejoin(gen, next)) {
+        this._migrating = false;
+        return;
+      }
+      // they never opened the room: drop them and try the next in line
+      this.players.delete(next);
+      this.ctx.peek('opponent')?.remove(next);
+    }
+    this._migrating = false;
+    this._exit('The host left the party.');
+  }
+
+  async _becomeHost(gen) {
+    let hub;
+    try {
+      hub = await openPartyHost(this.net, this.code, { gen });
+    } catch {
+      return false;
+    }
+    if (this.phase === 'off') {
+      hub.close();
+      return false;
+    }
+    this.link = hub;
+    this.gen = gen;
+    this.host = true;
+    this.hostId = this.me;
+    for (const p of this.players.values()) delete p.peer;
+    this._wireHub(hub);
+    this._rejoinUntil = performance.now() / 1000 + 20;
+    if (this.phase === 'match' || this.phase === 'results') {
+      const wall = performance.now() / 1000;
+      this.rules = new Deathmatch({ mode: this.settings.mode, scoreLimit: this.settings.scoreLimit, timeLimit: this.settings.timeLimit });
+      this.rules.restore({
+        state: this.phase === 'results' ? 'end' : this.live ? 'live' : 'countdown',
+        timeLeft: this.live && this._roundEndsAt ? Math.max(1, this._roundEndsAt - wall) : this.live ? this.settings.timeLimit : 1,
+        players: [...this.players.values()].map((p) => ({ id: p.id, team: p.team, kills: this._scores?.[p.id]?.[0] ?? 0, deaths: this._scores?.[p.id]?.[1] ?? 0, alive: this.alive[p.id] !== false })),
+        zone: this.settings.mode === 'koth' ? this._teams : undefined,
+      });
+      for (const [id, st] of this._seen) if (this.players.has(id)) this._latest.set(id, st);
+      // the bots carry on from where they were last seen
+      this._startBots({});
+      for (const [id, b] of this._bots) {
+        const st = this._seen.get(id);
+        if (st) b.place(st.x, st.z, st.yaw, st.y);
+        if (this.settings.mode === 'gun') b.weapon = this._botWeapon(gunFor(this._scores?.[id]?.[0] ?? 0));
+      }
+      if (this.phase === 'results' && this._lastEnd) this.ui.showResults({ ...this._lastEnd, host: true });
+    }
+    this._broadcastRoster(false);
+    return true;
+  }
+
+  async _rejoin(gen, hostId) {
+    const until = performance.now() / 1000 + 15;
+    while (performance.now() / 1000 < until && this.phase !== 'off') {
+      try {
+        const link = await openPartyGuest(this.net, this.code, { gen, timeout: 5000 });
+        if (this.phase === 'off') {
+          link.close();
+          return false;
+        }
+        this.link = link;
+        this.gen = gen;
+        this.host = false;
+        this.hostId = hostId;
+        this._wireGuest(link);
+        link.send({ type: 'p.rejoin', id: this.me });
+        return true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+    return false;
+  }
+
+  /** New host: someone from the old room is back. */
+  _hostRejoin(peer, m) {
+    const p = this.players.get(m.id);
+    if (!p || p.bot || p.peer || p.id === this.me) return this._hostJoin(peer, true);
+    p.peer = peer;
+    this._heard.set(p.id, performance.now() / 1000);
+    this.link.send(peer, { type: 'p.welcome', you: p.id, code: this.code });
+    this._broadcastRoster(false);
   }
 
   leave() {
+    this._migrating = false;
+    this._rejoinUntil = 0;
     this._abort?.abort();
     const l = this.link;
     this.link = null;
@@ -198,7 +327,12 @@ export class PartySystem {
     return null;
   }
 
-  _hostJoin(peer) {
+  _hostJoin(peer, now = false) {
+    if (!now && performance.now() / 1000 < (this._rejoinUntil ?? 0)) {
+      // right after a migration most arrivals are players coming back: give them a moment to say so
+      setTimeout(() => { if (this._idOf(peer) == null && this.link) this._hostJoin(peer, true); }, 1500);
+      return;
+    }
     const late = this.phase === 'match' && this.rules && this.rules.state !== 'end';
     if (this.phase !== 'lobby' && !late) {
       // the results screen: come back in a moment
@@ -289,7 +423,7 @@ export class PartySystem {
   }
 
   _broadcastRoster(start = true) {
-    const m = { type: 'p.roster', players: this._roster(), settings: this.settings };
+    const m = { type: 'p.roster', players: this._roster(), settings: this.settings, hostId: this.me };
     this.link?.broadcast(m);
     this._applyRoster(m);
     if (start) this._maybeStart();
@@ -640,6 +774,7 @@ export class PartySystem {
   _applyRoster(m) {
     if (!Array.isArray(m.players)) return;
     if (!this.host) {
+      if (Number.isInteger(m.hostId)) this.hostId = m.hostId;
       this.players = new Map(m.players.map((p) => [p.id, { ...p, name: cleanName(p.name) }]));
       if (m.settings) this.settings = m.settings;
     }
@@ -661,7 +796,7 @@ export class PartySystem {
     }
     if (this.phase === 'lobby') {
       const net = this.host ? '' : this.rtt != null ? `${Math.round(this.rtt)} ms` : '';
-      this.ui.showLobby({ code: this.code, me: this.me, host: this.host, players: [...this.players.values()], settings: this.settings, net });
+      this.ui.showLobby({ code: this.code, me: this.me, host: this.host, hostId: this.hostId ?? 0, players: [...this.players.values()], settings: this.settings, net });
     }
   }
 
@@ -698,6 +833,7 @@ export class PartySystem {
     this._clocks.clear();
     this._latest.clear();
     this._fresh.clear();
+    this._seen.clear();
     this._shots.clear();
     this._lastShot.clear();
     this._hitCount.clear();
@@ -821,7 +957,8 @@ export class PartySystem {
       this.live = false;
       this.phase = 'results';
       player?.setControlEnabled?.(false);
-      this.ui.showResults({ standings: ev.standings ?? [], teams: ev.teams ?? [0, 0], mode: this.settings.mode, winner: ev.winner, me: this.me, host: this.host });
+      this._lastEnd = { standings: ev.standings ?? [], teams: ev.teams ?? [0, 0], mode: this.settings.mode, winner: ev.winner, me: this.me };
+      this.ui.showResults({ ...this._lastEnd, host: this.host });
     }
   }
 
@@ -850,6 +987,7 @@ export class PartySystem {
 
   _applyState(s) {
     if (!Number.isInteger(s?.id) || s.id === this.me) return;
+    this._seen.set(s.id, s);
     const now = this.ctx.time.raw;
     let c = this._clocks.get(s.id);
     if (!c) this._clocks.set(s.id, (c = new ClockSync()));
@@ -902,8 +1040,8 @@ export class PartySystem {
     const seq = ++this._seq;
     const weapon = e?.weapon?.id ?? this._weaponId();
     if (this.host) {
-      this._recordShot(0, seq, t);
-      const out = { type: 'p.fire', id: 0, seq, weapon };
+      this._recordShot(this.me, seq, t);
+      const out = { type: 'p.fire', id: this.me, seq, weapon };
       this.link.broadcast(out);
     } else this._send({ type: 'p.fire', seq, t, weapon });
   }
@@ -980,7 +1118,7 @@ export class PartySystem {
   /** Guest: to the host. Host (`self`): handle as if it came from player 0. */
   _send(m, self = false) {
     if (this.host) {
-      if (self) this._hostMessage(0, m);
+      if (self) this._hostMessage(this.me, m);
       return;
     }
     this.link?.send(m);
@@ -1016,6 +1154,15 @@ export class PartySystem {
     }
     if (!this.link || this.phase === 'connecting') return;
     if (this.host) {
+      if (this._rejoinUntil && raw > this._rejoinUntil) {
+        this._rejoinUntil = 0;
+        for (const p of [...this.players.values()]) {
+          if (p.bot || p.peer || p.id === this.me) continue;
+          this.players.delete(p.id);
+          if (this.rules) this._hostEvents(this.rules.remove(p.id));
+        }
+        this._broadcastRoster(false);
+      }
       for (const [id, t] of this._heard ?? []) {
         const p = this.players.get(id);
         if (!p) this._heard.delete(id);
@@ -1034,7 +1181,7 @@ export class PartySystem {
       const l = this.link;
       this.link = null;
       l.close();
-      this._exit('Lost the connection to the host.');
+      this._hostLost();
     }
   }
 
@@ -1083,8 +1230,8 @@ export class PartySystem {
     }
     // host: one batch per guest with every state that arrived since the last
     // one (each snapshot goes out once), and the host's own
-    this._latest.set(0, s);
-    this._fresh.set(0, s);
+    this._latest.set(this.me, s);
+    this._fresh.set(this.me, s);
     for (const b of this._botStates(raw)) {
       this._fresh.set(b.id, b);
       this._applyState(b);

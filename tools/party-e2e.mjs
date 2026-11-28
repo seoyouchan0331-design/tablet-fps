@@ -243,6 +243,31 @@ await waitP(A, () => window.__ENGINE__.ctx.peek('grenades').live.length > 0, 100
 await waitP(A, () => (window.__ENGINE__.ctx.peek('party').hp[0] ?? 100) < 100, 60000).catch(() => fail('the blast did not hurt A'));
 step(`A after the blast: hp ${(await A.evaluate(() => window.__ENGINE__.ctx.peek('party').hp[0])).toFixed(0)}`);
 
+// ---- host migration: E joins the running match, then the host (A) leaves ---------------------
+const E = await open('E');
+await E.waitForFunction(() => window.__READY__ === true, null, { timeout: 900000, polling: 2000 });
+await waitAct(E, 'join'); await click(E, 'join');
+await waitAct(E, 'code');
+await E.fill('[data-act="code"]', code);
+await click(E, 'join-go');
+await waitP(E, () => { const P = window.__ENGINE__.ctx.peek('party'); return P.phase === 'match' && P.alive[P.me] === true; }, 60000).catch(() => fail('E never got into the match'));
+const eId = await E.evaluate(() => window.__ENGINE__.ctx.peek('party').me);
+const bKills = await B.evaluate(() => window.__ENGINE__.ctx.peek('party')._scores[1]?.[0]);
+await A.close();
+step(`host A left (E is ${eId}, B had ${bKills} kills)`);
+await waitP(B, () => window.__ENGINE__.ctx.peek('party').host === true, 30000).catch(() => fail('B did not take over as host'));
+await waitP(E, () => { const P = window.__ENGINE__.ctx.peek('party'); return P.hostId === 1 && P.link && P.phase === 'match'; }, 40000).catch(() => fail('E did not reconnect to the new host'));
+await waitP(B, (id) => !!window.__ENGINE__.ctx.peek('party').players.get(id)?.peer, 30000, eId).catch(() => fail('new host does not have E back'));
+const after = await Promise.all([B, E].map((p) => p.evaluate(() => { const P = window.__ENGINE__.ctx.peek('party'); return { host: P.host, hostId: P.hostId, live: P.live, players: [...P.players.keys()], bKills: P._scores[1]?.[0], rules: P.rules?.state }; })));
+step(`after migration: B ${JSON.stringify(after[0])} | E ${JSON.stringify(after[1])}`);
+if (after[0].rules !== 'live' || !after[0].live) fail('the match did not carry on under the new host');
+if (after[0].bKills !== bKills) fail("B's kills were lost in the migration");
+if (after[0].players.includes(0) || after[1].players.includes(0)) fail('the old host is still listed');
+// E moves: the new host sees it
+await E.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-6, 0.03, -18));
+await waitP(B, (id) => { const a = window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar; return a && Math.abs(a.position.z + 18) < 0.4; }, 30000, eId).catch(() => fail("the new host does not see E's moves"));
+step('the match carries on under B');
+
 if (errors.length) { fail('page errors'); for (const e of errors) console.error('  ', e); }
 await browser.close();
 console.log(failed ? 'PARTY FAILED' : 'PARTY OK');

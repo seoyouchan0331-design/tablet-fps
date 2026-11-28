@@ -20,6 +20,8 @@
 import { iceServers, buildIceConfig, routeFromStats } from './ice.js';
 
 const PREFIX = 'tfpp-';
+/** The broker id / channel of a room: a new host after a migration opens generation 1, 2, ... */
+const roomId = (code, gen = 0) => PREFIX + code + (gen ? `-g${gen}` : '');
 export const MAX_GUESTS = 7;
 
 class Hub {
@@ -68,9 +70,9 @@ class Link {
 const rid = () => Math.random().toString(36).slice(2, 10);
 
 class BcHost extends Hub {
-  constructor(code) {
+  constructor(code, gen = 0) {
     super();
-    this.ch = new BroadcastChannel(PREFIX + code);
+    this.ch = new BroadcastChannel(roomId(code, gen));
     this.peers = new Set();
     this.ch.onmessage = (e) => {
       const m = e.data;
@@ -101,10 +103,10 @@ class BcHost extends Hub {
 }
 
 class BcGuest extends Link {
-  constructor(code) {
+  constructor(code, gen = 0) {
     super();
     this.id = rid();
-    this.ch = new BroadcastChannel(PREFIX + code);
+    this.ch = new BroadcastChannel(roomId(code, gen));
   }
   connect(timeout) {
     return new Promise((resolve, reject) => {
@@ -217,9 +219,9 @@ class PeerGuest extends Link {
 /* --------------------------------------------------------------- factory -- */
 
 /** Host a party room. Errors: room-taken, network. */
-export async function openPartyHost(kind, code, { signal } = {}) {
-  if (kind === 'bc') return new BcHost(code);
-  const peer = await makePeer(PREFIX + code);
+export async function openPartyHost(kind, code, { signal, gen = 0 } = {}) {
+  if (kind === 'bc') return new BcHost(code, gen);
+  const peer = await makePeer(roomId(code, gen));
   return new Promise((resolve, reject) => {
     const fail = (err) => { peer.destroy(); reject(err); };
     signal?.addEventListener('abort', () => fail(new Error('cancelled')), { once: true });
@@ -232,8 +234,8 @@ export async function openPartyHost(kind, code, { signal } = {}) {
 }
 
 /** Join a party room. Errors: room-not-found, room-full, timeout, network. */
-export async function openPartyGuest(kind, code, { timeout = 15000, signal } = {}) {
-  if (kind === 'bc') return new BcGuest(code).connect(Math.min(timeout, 5000));
+export async function openPartyGuest(kind, code, { timeout = 15000, signal, gen = 0 } = {}) {
+  if (kind === 'bc') return new BcGuest(code, gen).connect(Math.min(timeout, 5000));
   const peer = await makePeer(undefined);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => fail(new Error('timeout')), timeout);
@@ -241,7 +243,7 @@ export async function openPartyGuest(kind, code, { timeout = 15000, signal } = {
     signal?.addEventListener('abort', () => fail(new Error('cancelled')), { once: true });
     peer.on('error', (e) => fail(new Error(e?.type === 'peer-unavailable' ? 'room-not-found' : 'network')));
     peer.on('open', () => {
-      const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
+      const conn = peer.connect(roomId(code, gen), { reliable: true, serialization: 'json' });
       const guest = new PeerGuest(peer, conn); // keeps what arrives until the caller listens
       conn.on('data', (d) => { if (d?.type === '_full') fail(new Error('room-full')); });
       conn.on('open', () => {

@@ -67,6 +67,23 @@ export class Deathmatch {
     return [{ type: 'countdown', time: this.countdown }];
   }
 
+  /**
+   * Pick a match up where another host left it (host migration): the
+   * scores, who is alive, the clock and the hill as every player knew them.
+   * @param {{state:string, timeLeft:number, players:{id:number, team:number, kills:number, deaths:number, alive:boolean}[], zone?:number[]}} s
+   */
+  restore(s) {
+    this.players.clear();
+    for (const p of s.players) this.players.set(p.id, { id: p.id, team: this.team ? p.team : p.id, kills: p.kills, deaths: p.deaths, alive: p.alive, respawnAt: 1, safeUntil: 0 });
+    this.clock = 0;
+    this.state = s.state;
+    this.timeLeft = s.timeLeft;
+    this.zone = [...(s.zone ?? [0, 0])];
+    this.holder = null;
+    this._zoneAcc = 0;
+    this.winner = null;
+  }
+
   scores() {
     const out = {};
     for (const p of this.players.values()) out[p.id] = [p.kills, p.deaths];

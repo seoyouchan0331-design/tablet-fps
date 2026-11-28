@@ -125,3 +125,12 @@ test('grenade damage: full at the blast, none past its radius', () => {
   assert.equal(grenadeDamage(GRENADE.radius), 0);
   assert.equal(grenadeDamage(20), 0);
 });
+
+test('restore: a new host picks the match up with its scores and clock', () => {
+  const dm = new Deathmatch({ mode: 'tdm', scoreLimit: 5 });
+  dm.restore({ state: 'live', timeLeft: 100, players: [{ id: 1, team: 0, kills: 4, deaths: 0, alive: true }, { id: 2, team: 1, kills: 0, deaths: 4, alive: false }] });
+  assert.deepEqual(dm.teamScores(), [4, 0]);
+  assert.equal(dm.canHit(1, 2), false, 'the dead stay dead');
+  assert.deepEqual(dm.tick(1.1), [{ type: 'respawn', id: 2 }]);
+  assert.equal(dm.kill(1, 2).at(-1).type, 'end', 'the 5th team kill still wins');
+});

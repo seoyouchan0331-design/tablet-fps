@@ -179,7 +179,7 @@ export class PartyUI {
     list.dataset.act = 'players';
     for (const p of s.players) {
       const row = el('div', `p${p.id === s.me ? ' me' : ''}`, list);
-      el('span', `n${isTeamMode(s.settings.mode) ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === 0 ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
+      el('span', `n${isTeamMode(s.settings.mode) ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === (s.hostId ?? 0) ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
       if (isTeamMode(s.settings.mode)) el('span', `t${p.team}`, row, p.team === 0 ? 'CYAN' : 'ORANGE');
       el('span', p.ready ? 'ok' : '', row, p.ready ? 'READY' : '…');
     }
