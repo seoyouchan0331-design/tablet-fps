@@ -19,7 +19,8 @@ next" — then list options first.
 | area | files |
 |---|---|
 | map data | `src/arena/layout.js` (`MAPS`, small maps, TOWN), `canal.js`, `town.js` (kit: `flight`, `parapet`, `arcade`, `bridge`, `tower`), `shapes.js` (`building`, `prop`, `stairRails`, `mirrorPiece`, `insideXZ`, `topAt`) |
-| sculpted props | `tools/blender/props.py` → GLBs → `tools/blender/glb2json.py` → `src/arena/props.json` |
+| sculpted props | `tools/blender/kit.py` (town), `skykit.py` (SKYBASE), `props.py` → GLBs → `tools/blender/glb2json.py` → merge into `src/arena/props.json` (glb2json writes a whole file: convert to a temp json and merge keys) |
+| map gadgets | `src/world/gadgets.js` (jump pads, lifts), `src/weapons/orbital.js` + party `_hostPower` (orbital laser) |
 | bots / walk graph | `src/party/bots.js` (`buildNav`, `findPath`, `BOT_LEVELS`) |
 | party (2–8 players) | `src/party/index.js`, `rules.js` (ffa/tdm/koth/gun, `canHit`), `wire.js`, `src/net/party.js` |
 | player safety | `src/player/unstuck.js` (`insideSolid`, rescue) |
@@ -29,7 +30,8 @@ next" — then list options first.
 
 ## Maps
 
-A layout is `{ size, depth?, boxes, spawns: [2], pickups?, hill?, floorColor?, grid? }`
+A layout is `{ size, depth?, boxes, spawns: [2], pickups?, hill?, floorColor?, color?, edgeColor?, grid?, killY?, pads?, lifts?, power?, far? }`
+(`killY`: a void map — below it you die in a match, nav has no ground without a floor piece; `far`: drawn-only scenery outside the bounds)
 registered in `MAPS` with `label`, `note`, optional `roundTime`.
 
 A piece is an axis box `{x, y, z, w, h, d}` (y is the centre) plus flags:

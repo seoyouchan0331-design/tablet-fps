@@ -29,8 +29,23 @@ const WARN = 0xff8a1e; // edge colour of the posts beside a drop
 /** A box from its extents. */
 const B = (x0, x1, y0, y1, z0, z1, extra) => ({ x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2, w: x1 - x0, h: y1 - y0, d: z1 - z0, ...extra });
 
-/** A railing along an edge, its glowing cap at waist height. */
-const rail = (x0, z0, x1, z1, y0 = 0) => parapet({ x0, z0, x1, z1, y0, h: 1.0, t: 0.2 });
+/**
+ * A railing along an axis-aligned edge: a hidden wall stops players (and
+ * grenades), and railing sections (Blender 'skyrail', 2 m each, stretched to
+ * fit) draw it.
+ */
+function rail(x0, z0, x1, z1, y0 = 0) {
+  const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+  const len = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+  const x = (x0 + x1) / 2, z = (z0 + z1) / 2;
+  const out = [alongX ? { x, y: y0 + 0.55, z, w: len, h: 1.1, d: 0.2, hidden: true } : { x, y: y0 + 0.55, z, w: 0.2, h: 1.1, d: len, hidden: true }];
+  const n = Math.max(1, Math.round(len / 2));
+  for (let i = 0; i < n; i++) {
+    const u = -len / 2 + (len * (i + 0.5)) / n;
+    out.push(prop('skyrail', alongX ? x + u : x, alongX ? z : z + u, alongX ? 0 : Math.PI / 2, y0, { sx: len / n / 2.0, deco: true }));
+  }
+  return out;
+}
 
 /** Orange posts on both sides of a drop. */
 const warnPosts = (pts, y0 = 0) => pts.map(([x, z]) => ({ x, y: y0 + 0.6, z, w: 0.3, h: 1.2, d: 0.3, e: WARN }));
@@ -118,8 +133,8 @@ const SKYBRIDGE = [
   B(13.9, 16.4, FH + 2.6, FH + 2.8, BR.z0, BR.z0 + 0.3, { deco: true }),
   B(13.9, 16.4, FH + 2.6, FH + 2.8, BR.z1 - 0.3, BR.z1, { deco: true }),
   // crates staggered across it: no straight line down its length
-  prop('crate', 9.6, BR.z0 + 1.0, 0, FH),
-  prop('crate', 13.6, BR.z1 - 1.0, 0, FH),
+  prop('skycrate', 9.6, BR.z0 + 1.0, 0, FH),
+  prop('skycrate', 13.6, BR.z1 - 1.0, 0, FH),
 ];
 
 // ------------------------------------------------------- annex and hangar --
@@ -156,12 +171,15 @@ const HANGARS = [
   ...rail(26.7, -21.0, 26.7, -14.4, FH),
   ...flight({ x: 21.0, z: -21.8, dir: '+x', y0: 0, rise: FH, rails: 'right' }),
   // a small aircraft parked inside: cover
-  B(18.4, 23.6, 0.3, 1.5, -19.6, -18.4), // fuselage
-  B(20.4, 21.6, 0.8, 1.0, -20.6, -17.4, { deco: true }), // wings
-  B(18.4, 19.0, 1.5, 2.6, -19.2, -18.8), // tail fin
-  B(22.4, 23.0, 0, 0.3, -19.4, -18.6, { noEdge: true }), // gear
-  prop('crate', 17.4, -22.0, 0),
-  prop('crate', 27.2, -12.6, 0),
+  prop('aircraft', 21.0, -19.0, Math.PI, 0, { deco: true }),
+  B(18.4, 23.6, 0.3, 1.6, -19.6, -18.4, { hidden: true }), // what stops you: its fuselage
+  prop('skycrate', 17.4, -22.0, 0),
+  prop('skycrate', 27.2, -12.6, 0),
+  // on the roof
+  prop('dish', 25.5, -14.0, -Math.PI / 4, H.top + 0.4, { deco: true }),
+  prop('vent', 20.0, -20.0, 0, H.top + 0.4, { deco: true }),
+  prop('antenna', 27.2, -21.8, 0, H.top + 0.4, { deco: true }),
+  prop('vent', 22.5, -12.5, Math.PI / 2, H.top + 0.4, { deco: true }),
   // the blast wall outside the big door: the tower can't see into the spawn
   ...parapet({ x0: 13.6, z0: -19.5, x1: 13.6, z1: -14.5, h: 1.5, t: 0.5 }),
 ];
@@ -186,15 +204,20 @@ const EDGES = [
 
 // cover on the open deck
 const COVER = [
-  prop('cratestack', 6.5, -13, Math.PI / 2),
-  prop('crate', 4.8, -15.5, 0.3),
-  ...parapet({ x0: 13, z0: 9, x1: 17, z1: 9, h: 1.2, t: 0.5 }),
-  prop('crate', 21.5, 9.5, 0),
-  prop('cratestack', 22.5, 13, 0),
-  ...parapet({ x0: -4.5, z0: -13, x1: -1, z1: -13, h: 1.2, t: 0.5 }),
-  prop('cratestack', 9.5, 17.5, 0),
-  ...parapet({ x0: 1, z0: 20, x1: 5, z1: 20, h: 1.2, t: 0.5 }),
-  prop('crate', 3.5, 9.5, 0.2),
+  prop('skystack', 6.5, -13, Math.PI / 2),
+  prop('skycrate', 4.8, -15.5, 0.3),
+  prop('barrier', 13.8, 9, 0),
+  prop('barrier', 16.2, 9, 0),
+  prop('skycrate', 21.5, 9.5, 0),
+  prop('skystack', 22.5, 13, 0),
+  prop('barrier', -2.75, -13, 0),
+  prop('skystack', 9.5, 17.5, 0),
+  prop('barrier', 3, 20, 0),
+  prop('skycrate', 3.5, 9.5, 0.2),
+  // floor light strips leading out of the hangar door and round the tower
+  prop('lightstrip', 15.0, -12.5, 0, 0, { deco: true }),
+  prop('lightstrip', 9.5, -10.0, Math.PI / 2, 0, { deco: true }),
+  prop('lightstrip', 8.5, 2.5, Math.PI / 2, 0, { deco: true }),
 ];
 
 // the lift's cage (the pads and the lift platform are drawn by world/gadgets.js)
@@ -203,11 +226,21 @@ const GADGETS = [
   { x: LIFT.x1 + 0.15, y: FH + 0.6, z: LIFT.z1 - 0.15, w: 0.3, h: 2 * FH, d: 0.3, e: WARN, deco: true },
 ];
 
-const HALF = [...TOWER, ...SKYBRIDGE, ...ANNEXES, ...HANGARS, ...EDGES, ...COVER, ...GADGETS];
+// the deck's underside: heavy blocks hanging under it, as in the art (drawn only)
+const UNDER = [
+  B(16, 28, -4.2, -1.2, -24, -10, { deco: true }),
+  B(18, 26, -6.5, -4.2, -22, -12, { deco: true }),
+  B(-6, 14, -3.4, -1.2, 10, 22, { deco: true }),
+  B(-2, 10, -5.2, -3.4, 12, 20, { deco: true }),
+  B(20, 28, -3.0, -1.2, 2, 14, { deco: true }),
+];
+
+const HALF = [...TOWER, ...SKYBRIDGE, ...ANNEXES, ...HANGARS, ...EDGES, ...COVER, ...GADGETS, ...UNDER];
 
 const CENTRE = [
   B(-3.5, 3.5, 6.0, 2 * FH, -3.5, 3.5, { sym: true }), // the lookout floor
   B(-3.9, 3.9, 2 * FH + 2.6, 2 * FH + 2.9, -3.9, 3.9, { sym: true, deco: true }), // cupola roof
+  { ...prop('capring', 0, 0, 0, 2 * FH, { deco: true }), sym: true }, // where the laser appears
 ];
 
 // invisible walls round the void: nobody walks or jumps out of the map
@@ -224,19 +257,14 @@ const CLOUD = 0xf6f9ff;
 // a fixed pseudo-random scatter (no Math.random in a map: every client builds the same one)
 const hash = (i) => { const v = Math.sin(i * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
 const PUFFS = [];
-for (let i = 0; i < 46; i++) {
-  const a = hash(i) * Math.PI * 2, r = 30 + hash(i + 100) * 120, s = 10 + hash(i + 200) * 22;
-  const x = Math.cos(a) * r, z = Math.sin(a) * r, y = -38 - hash(i + 300) * 22;
-  PUFFS.push({ x, y, z, w: s, h: s * 0.28, d: s * 0.7, ry: hash(i + 400) * Math.PI, c: CLOUD, deco: true, noEdge: true });
-  PUFFS.push({ x: x + s * 0.2, y: y + s * 0.16, z, w: s * 0.55, h: s * 0.3, d: s * 0.45, ry: hash(i + 400) * Math.PI, c: CLOUD, deco: true, noEdge: true });
+for (let i = 0; i < 40; i++) {
+  const a = hash(i) * Math.PI * 2, r = 34 + hash(i + 100) * 130;
+  PUFFS.push({ ...prop('cloud', Math.cos(a) * r, Math.sin(a) * r, hash(i + 400) * Math.PI, -40 - hash(i + 300) * 24, { deco: true }), c: CLOUD, noEdge: true });
 }
 const FAR = [
   ...PUFFS,
-  ...[[-95, -60, 14], [110, 30, 18], [-70, 110, 12], [60, -120, 16]].flatMap(([x, z, s]) => [
-    { x, y: 6, z, w: s, h: 4, d: s * 0.8, deco: true },
-    { x, y: 1, z, w: s * 0.6, h: 6, d: s * 0.5, deco: true, noEdge: true },
-    { x: x + s * 0.15, y: 11, z, w: s * 0.3, h: 6, d: s * 0.3, deco: true },
-  ]),
+  ...[[-95, -60, 4, 0.6], [110, 30, 10, 2.2], [-70, 110, -2, 4.0], [60, -120, 14, 1.1], [-130, 40, -8, 5.0]]
+    .map(([x, z, y, ry]) => prop('island', x, z, ry, y, { deco: true })),
 ];
 
 const mirror = mirrorPiece;
@@ -250,7 +278,9 @@ export const SKYBASE = {
     size: SX,
     depth: SZ,
     grid: false,
-    floorColor: 0xa9b0ba,
+    color: 0xc4cad3, // white panels
+    edgeColor: 0x4fb2ff, // blue neon
+    floorColor: 0xb3bac4,
     killY: -8, // below this, the void has you
     power: { x: 0, y: 2 * FH, z: 0 }, // the orbital laser appears on the lookout
     hill: { x: 0, z: 0, r: 7, y0: -0.5, y1: 4.5 }, // the tower's base and its ring
