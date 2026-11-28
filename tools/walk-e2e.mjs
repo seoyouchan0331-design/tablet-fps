@@ -16,9 +16,19 @@ await p.evaluate(() => document.querySelector('[data-act=practice]').click());
 await p.waitForTimeout(400);
 await p.evaluate(() => document.querySelector('.ow-loadout .start')?.click());
 await p.waitForTimeout(1200);
-await p.evaluate(() => window.__ENGINE__.ctx.peek('world').load('town'));
+const loadMap = (id) => p.evaluate((id) => window.__ENGINE__.ctx.peek('world').load(id), id);
+await loadMap('town');
 await p.waitForTimeout(500);
 
+const CANAL_ROUTES = {
+  // down a stair into the canal, under the bridge's middle arch, through the
+  // lock gate's doorway, back up a stair on the far quay
+  canalfloor: { start: [9, -12.2], path: [[6.9, -12.2], [5.15, -12.6], [5.15, -7.8], [3.5, -8.2], [0, -8.2], [0, 8], [0, 14], [0, 16.4], [-5.15, 16.2], [-5.15, 20.6], [-7.5, 20.4], [-9, 20.4]], y: 0 },
+  plazabridge: { start: [9, 0], path: [[3, 0], [-3, 0], [-9, 0]], y: 0 },
+  footbridge: { start: [9, 23], path: [[0, 23], [-9, 23]], y: 0 },
+  gatewalk: { start: [8, 15], path: [[0, 15], [-8, 15]], y: 0 },
+  canaltower: { start: [21, 24.5], path: [[23.4, 24.5], [23.5, 23.0], [27.5, 23.0], [27.5, 26.0], [23.5, 26.0], [23.5, 23.0], [25.5, 24.5]], y: 6.4 },
+};
 const ROUTES = {
   tower: { start: [19.5, 18.5], path: [[22.4, 18.5], [22.5, 16.5], [25.9, 16.5], [25.9, 20.5], [22.5, 20.5], [22.5, 16.5], [24.5, 18.2]], y: 6.4 },
   gallery: { start: [16.5, 21], path: [[15.3, 22.2], [9.4, 22.2], [5, 21], [-8.3, 21.3], [-10.6, 21.3]], y: 3.2 },
@@ -27,7 +37,12 @@ const ROUTES = {
   spawnstair: { start: [33, -18.5, 3.25], path: [[34.2, -16.3], [34.2, -10]], y: 0 },
 };
 let fail = 0;
-for (const [name, r] of Object.entries(ROUTES)) {
+const ALL = [...Object.entries(ROUTES).map(([n, r]) => ['town', n, r]), ...Object.entries(CANAL_ROUTES).map(([n, r]) => ['canal', n, r])];
+for (const [map, name, r] of ALL) {
+  if ((await p.evaluate(() => window.__ENGINE__.ctx.peek('world').mapId)) !== map) {
+    await loadMap(map);
+    await p.waitForTimeout(500);
+  }
   const res = await p.evaluate(async (r) => {
     const pl = window.__ENGINE__.ctx.peek('player');
     const mv = pl.movement;

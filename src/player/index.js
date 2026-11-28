@@ -718,9 +718,9 @@ export class PlayerSystem {
   }
 
   /** Respawn at a point (party mode: the host picks spawns anywhere on the map). */
-  respawnAt(x, z, yaw = 0) {
+  respawnAt(x, z, yaw = 0, y = 0) {
     this.health.reset(true);
-    const gy = this.physics.groundHeight(x, z, 2.5); // spawn points are open ground: never a roof
+    const gy = this.physics.groundHeight(x, z, y + 2.5); // spawn points are open ground: never under a roof
     this.movement.yaw = yaw;
     this.movement.pitch = 0;
     this.movement.teleport(x, Number.isFinite(gy) ? gy + 0.03 : 0.03, z);

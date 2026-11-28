@@ -232,6 +232,7 @@ export function spawnCandidates(layout, insideXZ) {
  * @param {{side?:number, axis?:{x:number,z:number}, rng?:()=>number}} [opt]
  */
 export function pickSpawn(cands, enemies, { side = 0, axis = { x: 1, z: 0 }, rng = Math.random } = {}) {
+  // (candidates may carry a height y: raised ground; it comes back with the pick)
   let pool = side ? cands.filter((c) => Math.sign(c.x * axis.x + c.z * axis.z) === side) : cands;
   if (!pool.length) pool = cands;
   if (!pool.length) return { x: 0, z: 0, yaw: 0 };
@@ -240,5 +241,5 @@ export function pickSpawn(cands, enemies, { side = 0, axis = { x: 1, z: 0 }, rng
   const top = ranked.slice(0, Math.min(4, ranked.length));
   const c = top[Math.floor(rng() * top.length)].c;
   // face the middle of the map
-  return { x: c.x, z: c.z, yaw: Math.atan2(c.x, c.z) };
+  return { x: c.x, z: c.z, y: c.y ?? 0, yaw: Math.atan2(c.x, c.z) };
 }

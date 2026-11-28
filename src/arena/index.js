@@ -81,9 +81,9 @@ export class ArenaSystem {
     const decoGeos = [];
     const clipGeos = [];
     const edgeGeos = [];
-    let floorGeo = null;
+    const floorGeos = []; // usually one slab; a map with a sunken canal has several
     for (const b of layout.boxes) {
-      if (b.floor) floorGeo = pieceGeometry(b, layout.floorColor ?? FLOOR);
+      if (b.floor) floorGeos.push(pieceGeometry(b, layout.floorColor ?? FLOOR));
       else if (b.hidden) clipGeos.push(pieceGeometry(b, GREY));
       else (b.deco ? decoGeos : boxGeos).push(pieceGeometry(b, layout.color ?? GREY));
       if (!b.hidden) edgeGeos.push(...edgeGeometries(b, b.floor ? 0.08 : 0.045, layout.edgeColor));
@@ -92,6 +92,7 @@ export class ArenaSystem {
     this.mesh.name = 'arena-boxes';
     this.mesh.userData.surface = 'concrete';
     this.mesh.castShadow = this.mesh.receiveShadow = true; // lite renderer's shadow map
+    const floorGeo = floorGeos.length > 1 ? mergeGeometries(floorGeos) : floorGeos[0];
     this.floor = new THREE.Mesh(floorGeo, this.floorMaterial);
     this.floor.name = 'arena-floor';
     this.floor.receiveShadow = true;
@@ -175,9 +176,11 @@ export class ArenaSystem {
     return this.spawnPoints[((i % n) + n) % n];
   }
 
-  /** Top of the highest piece under (x, z) (ramps by their slope), or 0 for the bare floor. */
+  /** Top of the highest piece under (x, z) (ramps by their slope), or the floor's own height. */
   groundHeight(x, z) {
-    let top = 0;
+    let floor = -Infinity;
+    for (const b of this.layout.boxes) if (b.floor) floor = Math.max(floor, topAt(b, x, z));
+    let top = Number.isFinite(floor) ? floor : 0;
     for (const b of this.layout.boxes) {
       if (b.wall || b.floor) continue;
       top = Math.max(top, topAt(b, x, z));

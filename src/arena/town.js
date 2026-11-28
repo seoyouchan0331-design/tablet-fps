@@ -30,16 +30,29 @@ export function flight({ x, z, dir, y0 = 0, rise = 1.6, w = 1.4 }) {
   ];
 }
 
-/** A cover wall from (x0, z0) to (x1, z1) (axis-aligned) standing on y0, with a glowing cap. */
-export function parapet({ x0, z0, x1, z1, y0 = 0, h = COVER, t = 0.3 }) {
+/**
+ * A cover wall from (x0, z0) to (x1, z1) (axis-aligned) standing on y0, with a
+ * glowing cap; `posts` (metres apart) adds square posts with their own caps.
+ */
+export function parapet({ x0, z0, x1, z1, y0 = 0, h = COVER, t = 0.3, posts = 0 }) {
   const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
   const len = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
   const x = (x0 + x1) / 2, z = (z0 + z1) / 2;
   const box = (hh, tt, y) => (alongX ? { x, y, z, w: len, h: hh, d: tt } : { x, y, z, w: tt, h: hh, d: len });
-  return [
+  const out = [
     { ...box(h, t, y0 + h / 2), noEdge: true },
     box(0.08, t + 0.1, y0 + h + 0.04), // the cap carries the neon line
   ];
+  if (posts > 0 && len > 1) {
+    const n = Math.max(1, Math.round(len / posts));
+    for (let i = 0; i <= n; i++) {
+      const u = -len / 2 + 0.25 + ((len - 0.5) * i) / n;
+      const px = alongX ? x + u : x, pz = alongX ? z : z + u;
+      out.push({ x: px, y: y0 + (h + 0.15) / 2, z: pz, w: 0.5, h: h + 0.15, d: 0.5, noEdge: true });
+      out.push({ x: px, y: y0 + h + 0.19, z: pz, w: 0.6, h: 0.08, d: 0.6 });
+    }
+  }
+  return out;
 }
 
 /**
@@ -81,14 +94,19 @@ export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2 }) {
  * side making three openings to shoot through, a flat roof. The passage
  * under it stays open, 2.9 m clear.
  */
-export function bridge({ x, z0, z1, w = 3, fh = 3.2, top = 6.2 }) {
+export function bridge({ x, z0, z1, w = 3, fh = 3.2, top = 6.2, axis = 'z' }) {
+  if (axis === 'x') {
+    // the same bridge spanning x (x is then the bridge's z, z0..z1 its x range):
+    // build it along z and swap the axes (every part is square or a box)
+    return bridge({ x, z0, z1, w, fh, top }).map((p) => ({ ...p, x: p.z, z: p.x, w: p.d, d: p.w }));
+  }
   const z = (z0 + z1) / 2, len = z1 - z0;
   const out = [{ x, y: fh - 0.15, z, w, h: 0.3, d: len, noEdge: true }];
   for (const s of [-1, 1]) {
     const xs = x + s * (w / 2 - 0.15);
     out.push({ x: x + s * (w / 2 + 0.04), y: fh - 0.12, z, w: 0.08, h: 0.18, d: len }); // fascia
     out.push(...parapet({ x0: xs, z0, x1: xs, z1, y0: fh }));
-    for (const k of [1, 2]) out.push({ ...prop('pier', xs, z0 + (len * k) / 3, 0, fh), noEdge: true });
+    for (const k of [1, 2]) out.push({ ...prop('pier', xs, z0 + (len * k) / 3, 0, fh), noEdge: true, sym: true }); // square: its own twin turned
   }
   out.push({ x, y: top + 0.125, z, w: w + 0.4, h: 0.25, d: len });
   return out;

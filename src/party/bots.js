@@ -43,27 +43,44 @@ function surfaceNear(b, x, z) {
   return topAt(b, cx, cz);
 }
 
+/**
+ * How the walk graph sees a piece. A prop is its bounding box, except an
+ * arch bay, whose opening you walk through: its two half piers and the band
+ * over the crown.
+ */
+function navPieces(b) {
+  if (b.prop !== 'archbay') return [b];
+  const c = Math.cos(b.ry ?? 0), s = Math.sin(b.ry ?? 0);
+  const base = b.y - b.h / 2;
+  const at = (lx, w, y0, y1) => ({ x: b.x + lx * c, z: b.z - lx * s, y: base + (y0 + y1) / 2, h: y1 - y0, w, d: b.d, ...(b.ry ? { ry: b.ry } : {}) });
+  return [at(-1.53, 0.6, 0, 2.9), at(1.53, 0.6, 0, 2.9), at(0, 3.66, 2.7, 2.9)];
+}
+
 /** The walkable levels of a layout, and how they connect. */
 export function buildNav(layout) {
   const hx = layout.size / 2 - 1.5, hz = (layout.depth ?? layout.size) / 2 - 1.5;
   const cols = Math.floor((2 * hx) / STEP) + 1, rows = Math.floor((2 * hz) / STEP) + 1;
   // (the tower roof's box spans the whole platform; its posts stand on the
   // parapet corners, where nobody walks)
-  const solid = layout.boxes.filter((b) => !b.deco && !b.floor && b.prop !== 'towerroof');
+  const solid = layout.boxes.filter((b) => !b.deco && !b.floor && b.prop !== 'towerroof').flatMap(navPieces);
+  const floors = layout.boxes.filter((b) => b.floor);
   const nodes = []; // {x, y, z, cell}
   const cells = Array.from({ length: cols * rows }, () => []); // node ids per cell
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const x = -hx + c * STEP, z = -hz + r * STEP;
       const near = solid.filter((b) => insideXZ(b, x, z, BODY + 0.5));
-      const tops = [0];
+      // the floor here (a map may have several at different heights: a sunken canal)
+      let ground = -Infinity;
+      for (const f of floors) if (insideXZ(f, x, z, 0)) ground = Math.max(ground, f.y + f.h / 2);
+      const tops = [Number.isFinite(ground) ? ground : 0];
       for (const b of near) {
         if (!insideXZ(b, x, z, 0)) continue;
         const h = b.ramp ? topAt(b, x, z) : b.y + b.h / 2;
-        if (h > 0.05 && h < 12) tops.push(h);
+        if (h > tops[0] + 0.05 && h < 12) tops.push(h);
       }
       tops.sort((a, b) => a - b);
-      let last = -1;
+      let last = -Infinity; // (floors can be below 0: a sunken canal)
       for (const h of tops) {
         if (h - last < 0.1) continue;
         last = h;
@@ -160,6 +177,48 @@ export function findPath(g, from, to, maxNodes = 12000) {
   const path = [];
   for (let i = b; i !== -1 && i !== a; i = came[i]) path.push({ ...g.nodes[i] });
   return path.reverse();
+}
+
+/**
+ * Where players may (re)spawn, from the walk graph: levels that belong to the
+ * main walkable area (not a crate top), no higher than `maxY` (no roofs or
+ * tower tops), flat for a step all round (not a stair) and open to the sky
+ * (not indoors), on a 3 m lattice. Works for raised ground (quays, terraces).
+ * @returns {{x:number, y:number, z:number}[]}
+ */
+export function spawnPoints(g, { maxY = 3, every = 3 } = {}) {
+  // the largest connected area
+  const comp = new Int32Array(g.nodes.length).fill(-1);
+  let best = -1, bestN = 0;
+  for (let s = 0, c = 0; s < g.nodes.length; s++) {
+    if (comp[s] !== -1) continue;
+    let n = 0;
+    const stack = [s];
+    comp[s] = c;
+    while (stack.length) {
+      const i = stack.pop();
+      n++;
+      for (const j of g.edges[i]) if (comp[j] === -1) { comp[j] = c; stack.push(j); }
+    }
+    if (n > bestN) { bestN = n; best = c; }
+    c++;
+  }
+  const out = [];
+  for (let i = 0; i < g.nodes.length; i++) {
+    const n = g.nodes[i];
+    if (comp[i] !== best || n.y > maxY) continue;
+    const c = n.cell % g.cols, r = Math.floor(n.cell / g.cols);
+    if (c % every || r % every) continue;
+    if (g.cells[n.cell].some((j) => g.nodes[j].y > n.y + 0.5)) continue; // a floor or roof overhead: indoors
+    let flat = true;
+    for (let dr = -1; dr <= 1 && flat; dr++) for (let dc = -1; dc <= 1 && flat; dc++) {
+      const cc = c + dc, rr = r + dr;
+      if (cc < 0 || rr < 0 || cc >= g.cols || rr >= g.rows) { flat = false; break; }
+      if (!g.cells[rr * g.cols + cc].some((j) => Math.abs(g.nodes[j].y - n.y) < 0.05)) flat = false;
+    }
+    if (flat) out.push({ x: n.x, y: n.y, z: n.z });
+  }
+  return out;
 }
 
 /** Chance a bot's shot lands, by distance: sure up close, a long shot is a gamble. */

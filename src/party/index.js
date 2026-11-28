@@ -24,7 +24,7 @@ import { validateHit } from '../match/validate.js';
 import { ClockSync } from '../match/interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn, isTeamMode, gunFor, HILL } from './rules.js';
-import { Bot, buildNav, BOT_LEVELS } from './bots.js';
+import { Bot, buildNav, BOT_LEVELS, spawnPoints } from './bots.js';
 import { packState, unpackState } from './wire.js';
 import { grenadeDamage } from '../weapons/grenades.js';
 import { insideXZ } from '../arena/shapes.js';
@@ -527,7 +527,7 @@ export class PartySystem {
     if (![...this.players.values()].every((p) => p.ready)) return;
     if (isTeamMode(this.settings.mode) && new Set([...this.players.values()].map((p) => p.team)).size < 2) return;
     this.rules = new Deathmatch({ mode: this.settings.mode, scoreLimit: this.settings.scoreLimit, timeLimit: this.settings.timeLimit });
-    this._cands = spawnCandidates(MAPS[this.settings.map].layout, insideXZ);
+    this._cands = this._spawnCands();
     const roster = this._roster();
     const evs = this.rules.start(roster);
     const spawns = {};
@@ -667,9 +667,23 @@ export class PartySystem {
       const gun = this.settings.mode === 'gun' ? gunFor(0) : p.primary;
       const b = new Bot({ id: p.id, grid: this._grid, weapon: this._botWeapon(gun), level: this.settings.botLevel });
       const s = spawns[p.id];
-      if (s) b.place(s.x, s.z, s.yaw);
+      if (s) b.place(s.x, s.z, s.yaw, s.y ?? 0);
       this._bots.set(p.id, b);
     }
+  }
+
+  /** Spawn points for the current map (the walk graph's open, flat, reachable levels); cached per map. */
+  _spawnCands() {
+    const map = this.settings.map;
+    this._navs ??= new Map();
+    if (!this._navs.has(map)) this._navs.set(map, buildNav(MAPS[map].layout));
+    this._spawnCache ??= new Map();
+    if (!this._spawnCache.has(map)) {
+      const pts = spawnPoints(this._navs.get(map));
+      // a tiny map could leave too few: fall back to the flat ground grid
+      this._spawnCache.set(map, pts.length >= 8 ? pts : spawnCandidates(MAPS[map].layout, insideXZ));
+    }
+    return this._spawnCache.get(map);
   }
 
   _botWeapon(id) {
@@ -685,9 +699,16 @@ export class PartySystem {
       let q = null;
       if (p.id === this.me) q = this.ctx.peek('player')?.position;
       else q = this._bots?.get(p.id) ?? this._latest.get(p.id);
-      if (q && Math.hypot(q.x - HILL.x, q.z - HILL.z) <= HILL.r && q.y < HILL.h) n[p.team]++;
+      const H = this._hillDef();
+      if (q && Math.hypot(q.x - H.x, q.z - H.z) <= H.r && q.y >= H.y0 && q.y < H.y1) n[p.team]++;
     }
     return n;
+  }
+
+  /** This map's hill: its own (layout.hill) or the default circle round the middle. */
+  _hillDef() {
+    const h = MAPS[this.settings.map]?.layout?.hill;
+    return { x: h?.x ?? HILL.x, z: h?.z ?? HILL.z, r: h?.r ?? HILL.r, y0: h?.y0 ?? -1, y1: h?.y1 ?? HILL.h };
   }
 
   /** The hill's ring on the ground: white = free/contested, cyan = ours, orange = theirs. */
@@ -698,10 +719,11 @@ export class PartySystem {
 
   _showHill(on) {
     if (on && !this._hill) {
-      const g = new THREE.RingGeometry(HILL.r - 0.18, HILL.r, 64);
+      const H = this._hillDef();
+      const g = new THREE.RingGeometry(H.r - 0.18, H.r, 64);
       g.rotateX(-Math.PI / 2);
       this._hill = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xe8f4f8, toneMapped: false, transparent: true, opacity: 0.9, depthWrite: false }));
-      this._hill.position.set(HILL.x, 0.04, HILL.z);
+      this._hill.position.set(H.x, Math.max(0, H.y0 + 0.5) + 0.04, H.z);
       this._hill.renderOrder = 2;
       this.ctx.scene.add(this._hill);
     } else if (!on && this._hill) {
@@ -742,7 +764,8 @@ export class PartySystem {
       // small steps: a slow frame must not carry a bot through a wall
       let r = {};
       // king of the hill: with nobody in sight, bots head for the hill
-      const goal = this.settings.mode === 'koth' ? { x: HILL.x + ((id * 2.3) % 5) - 2.5, y: 0, z: HILL.z + ((id * 1.7) % 5) - 2.5 } : null;
+      const H = this._hillDef();
+      const goal = this.settings.mode === 'koth' ? { x: H.x + ((id * 2.3) % 5) - 2.5, y: Math.max(0, H.y0 + 0.5), z: H.z + ((id * 1.7) % 5) - 2.5 } : null;
       if (live) for (let left = dt; left > 1e-6 && !r.fire; left -= 0.1) r = bot.update(Math.min(0.1, left), { enemies, los, goal });
       if (r.fire) {
         this.botShots = (this.botShots ?? 0) + 1;
@@ -772,7 +795,7 @@ export class PartySystem {
       if (ev.type === 'respawn') {
         this.hp[ev.id] = MAX_HP;
         ev.spawn = this._pickSpawn(ev.id);
-        this._bots?.get(ev.id)?.place(ev.spawn.x, ev.spawn.z, ev.spawn.yaw);
+        this._bots?.get(ev.id)?.place(ev.spawn.x, ev.spawn.z, ev.spawn.yaw, ev.spawn.y ?? 0);
       }
       const m = { type: 'p.ev', ev };
       this.link?.broadcast(m);
@@ -916,7 +939,7 @@ export class PartySystem {
     ctx.config.aimAssist = this.settings.aimAssist;
     ctx.peek('practice')?.setActive(false);
     ctx.peek('world')?.load?.(this.settings.map);
-    this._cands = spawnCandidates(MAPS[this.settings.map].layout, insideXZ);
+    this._cands = this._spawnCands();
     const me = this.players.get(this.me);
     if (this.settings.mode === 'gun') ctx.peek('weapons')?.setLoadout(gunFor(0), 'pistol');
     else ctx.peek('weapons')?.setLoadout(me?.primary ?? 'rifle');
@@ -949,7 +972,7 @@ export class PartySystem {
     this._scores = {};
     this._teams = [0, 0];
     const sp = m.spawns?.[this.me];
-    if (sp) player?.respawnAt(sp.x, sp.z, sp.yaw);
+    if (sp) player?.respawnAt(sp.x, sp.z, sp.yaw, sp.y);
     player?.setControlEnabled?.(false);
     this.live = false;
     if (m.late) {
@@ -1042,7 +1065,7 @@ export class PartySystem {
         this._deadUntil = null;
         this.ui.hideBoard();
         const s = ev.spawn;
-        if (s) player?.respawnAt(s.x, s.z, s.yaw);
+        if (s) player?.respawnAt(s.x, s.z, s.yaw, s.y);
         if (player?.health) player.health.regenEnabled = false;
         ctx.peek('weapons')?.refillAll?.();
         ctx.peek('grenades')?.refill();

@@ -61,12 +61,12 @@ test('spawns are not inside a box', () => {
 // ---- every map --------------------------------------------------------------
 import { MAPS, MAP_IDS } from '../src/arena/layout.js';
 
-test('five maps, GRID first and identical to ARENA', () => {
-  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'town', 'field']);
+test('six maps, GRID first and identical to ARENA', () => {
+  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'town', 'canal', 'field']);
   assert.equal(MAPS.grid.layout, ARENA);
 });
 
-for (const id of ['grid', 'lanes', 'blocks', 'field', 'town']) {
+for (const id of ['grid', 'lanes', 'blocks', 'field', 'town', 'canal']) {
   const L = MAPS[id].layout;
   test(`${id}: valid (symmetric, bounded, walls, spawns 24 m apart)`, () => {
     assert.deepEqual(validateLayout(L), []);
@@ -166,4 +166,27 @@ test('town: the arcade gallery and the bridge each have two ways off', () => {
   assert.equal(solidsAt(L, 22, 3.2 + 1.0, -4.2).length, 0, 'south house door');
   // and the passage under it is open
   assert.equal(solidsAt(L, 22, 1.0, 0).length, 0, 'passage under the bridge');
+});
+
+import { buildNav, findPath, spawnPoints } from '../src/party/bots.js';
+test('canal: quays at 0 m, the canal floor at -3.2 m; every crossing and stair is walkable', () => {
+  const L = MAPS.canal.layout;
+  const g = buildNav(L);
+  const at = (x, y, z) => findPath(g, { x: 27, y: 0, z: 0 }, { x, y, z });
+  for (const [name, to] of Object.entries({
+    'plaza bridge': { x: 0, y: 0, z: 0 },
+    'canal under the bridge': { x: 0, y: -3.2, z: 0 },
+    'canal past a lock gate': { x: 0, y: -3.2, z: 20 },
+    footbridge: { x: 0, y: 0, z: 23 },
+    'far quay': { x: -27, y: 0, z: 0 },
+    'tower top': { x: 25.5, y: 6.4, z: 24 },
+  })) {
+    const p = at(to.x, to.y, to.z);
+    assert.ok(p?.length, `${name}: no path`);
+    const e = p.at(-1);
+    assert.ok(Math.abs(e.y - to.y) < 0.35 && Math.hypot(e.x - to.x, e.z - to.z) < 1.6, `${name}: ends at ${e.x},${e.y.toFixed(2)},${e.z}`);
+  }
+  // spawns happen on both levels
+  const pts = spawnPoints(g);
+  assert.ok(pts.some((p) => p.y === 0) && pts.some((p) => p.y === -3.2), 'spawn points on the quays and in the canal');
 });
