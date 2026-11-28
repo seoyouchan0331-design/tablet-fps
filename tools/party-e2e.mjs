@@ -160,6 +160,27 @@ const ph = await Promise.all([A, B].map((p) => party(p, () => window.__ENGINE__.
 if (ph.join() !== 'lobby,lobby') fail(`phases after BACK TO ROOM: ${ph}`);
 step('back in the room');
 
+// ---- bots ----------------------------------------------------------------------------
+await click(A, 'add-bot');
+await click(A, 'add-bot');
+await waitP(B, () => [...window.__ENGINE__.ctx.peek('party').players.values()].filter((p) => p.bot).length === 2, 15000).catch(() => fail('B does not list the two bots'));
+await click(A, 'remove-bot');
+await waitP(B, () => [...window.__ENGINE__.ctx.peek('party').players.values()].filter((p) => p.bot).length === 1, 15000).catch(() => fail('bot not removed'));
+await click(A, 'map-town');
+await D.close();
+for (const p of [A, B]) await click(p, 'ready');
+await Promise.all([A, B].map((p) => waitP(p, () => window.__ENGINE__.ctx.peek('party').live === true, 60000).catch(() => fail('bot match never went live'))));
+const botId = await A.evaluate(() => [...window.__ENGINE__.ctx.peek('party').players.values()].find((p) => p.bot).id);
+const p0 = await B.evaluate((id) => { const a = window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar; return a ? [a.position.x, a.position.z, a.alive] : null; }, botId);
+// keep the humans out of the way, then watch the bot hunt
+await A.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-29.5, 0.03, 0));
+await B.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(29.5, 0.03, 0));
+await waitP(A, () => (window.__ENGINE__.ctx.peek('party').botShots ?? 0) > 0, 90000).catch(() => fail('the bot never fired'));
+const p1 = await B.evaluate((id) => { const a = window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar; return a ? [a.position.x, a.position.z, a.alive] : null; }, botId);
+step(`bot ${botId} seen by B: ${JSON.stringify(p0)} -> ${JSON.stringify(p1)}; host counted ${await A.evaluate(() => window.__ENGINE__.ctx.peek('party').botShots)} bot shots`);
+if (!p0 || !p1) fail('B does not see the bot');
+else if (Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) < 2) fail('the bot did not move');
+
 if (errors.length) { fail('page errors'); for (const e of errors) console.error('  ', e); }
 await browser.close();
 console.log(failed ? 'PARTY FAILED' : 'PARTY OK');

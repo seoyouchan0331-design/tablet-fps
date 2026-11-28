@@ -49,7 +49,7 @@ export class PartyUI {
   /**
    * @param {HTMLElement} host
    * @param {{ready:(primary:string)=>void, settings:(s:object)=>void, team:(t:number)=>void,
-   *          name:(n:string)=>void, again:()=>void, leave:()=>void}} on
+   *          name:(n:string)=>void, bot:(n:number)=>void, again:()=>void, leave:()=>void}} on
    */
   constructor(host, on) {
     this.on = on;
@@ -168,9 +168,16 @@ export class PartyUI {
     list.dataset.act = 'players';
     for (const p of s.players) {
       const row = el('div', `p${p.id === s.me ? ' me' : ''}`, list);
-      el('span', `n${s.settings.mode === 'tdm' ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === 0 ? ' · host' : ''}${p.id === s.me ? ' (you)' : ''}`);
+      el('span', `n${s.settings.mode === 'tdm' ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === 0 ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
       if (s.settings.mode === 'tdm') el('span', `t${p.team}`, row, p.team === 0 ? 'CYAN' : 'ORANGE');
       el('span', p.ready ? 'ok' : '', row, p.ready ? 'READY' : '…');
+    }
+    if (s.host) {
+      const br = el('div', 'row', this.root);
+      const add = this._btn(br, '+ BOT', 'add-bot', () => this.on.bot(1));
+      add.disabled = s.players.length >= 8 || !!me?.ready;
+      const rem = this._btn(br, '− BOT', 'remove-bot', () => this.on.bot(-1));
+      rem.disabled = !s.players.some((p) => p.bot) || !!me?.ready;
     }
     const row = el('div', 'row actions', this.root);
     if (s.settings.mode === 'tdm') {

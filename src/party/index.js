@@ -24,6 +24,7 @@ import { validateHit } from '../match/validate.js';
 import { ClockSync } from '../match/interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn } from './rules.js';
+import { Bot, buildGrid } from './bots.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
 import { PartyUI, playerName, names, cleanName } from '../ui/party.js';
@@ -79,6 +80,7 @@ export class PartySystem {
       ready: (primary) => this._send({ type: 'p.ready', primary }, true),
       settings: (s) => this._changeSettings(s),
       team: (t) => this._send({ type: 'p.team', team: t }, true),
+      bot: (n) => (n > 0 ? this._addBot() : this._removeBot()),
       name: (n) => {
         saveName(n);
         this._send({ type: 'p.name', name: n }, true);
@@ -198,12 +200,14 @@ export class PartySystem {
       setTimeout(() => this.link?.kick(peer), 200);
       return;
     }
+    if (this.players.size >= 8 && !this._removeBot(false)) {
+      this.link.send(peer, { type: 'p.full' });
+      setTimeout(() => this.link?.kick(peer), 200);
+      return;
+    }
     let id = 1;
     while (this.players.has(id)) id++;
-    // balance teams: join the smaller one
-    const n = [0, 0];
-    for (const p of this.players.values()) n[p.team]++;
-    const team = n[1] < n[0] ? 1 : 0;
+    const team = this._smallerTeam();
     this.players.set(id, { id, team, ready: late, primary: 'rifle', peer, name: '' });
     this._heard.set(id, performance.now() / 1000);
     this.link.send(peer, { type: 'p.welcome', you: id, code: this.code });
@@ -229,6 +233,36 @@ export class PartySystem {
     this._broadcastRoster();
   }
 
+  _smallerTeam() {
+    const n = [0, 0];
+    for (const p of this.players.values()) n[p.team]++;
+    return n[1] < n[0] ? 1 : 0;
+  }
+
+  /** Host, in the room: a bot takes a free slot (8 players at most). */
+  _addBot() {
+    if (!this.host || this.phase !== 'lobby' || this.players.size >= 8) return;
+    let id = 1;
+    while (this.players.has(id)) id++;
+    const n = [...this.players.values()].filter((p) => p.bot).length + 1;
+    const primary = ['rifle', 'smg', 'shotgun'][n % 3];
+    this.players.set(id, { id, team: this._smallerTeam(), ready: true, primary, bot: true, name: `Bot ${n}` });
+    this._broadcastRoster(false);
+  }
+
+  /** Drop the newest bot (to make room, or on request). False when there is none. */
+  _removeBot(announce = true) {
+    const bots = [...this.players.values()].filter((p) => p.bot);
+    if (!bots.length || (announce && this.phase !== 'lobby')) return false;
+    const id = bots.at(-1).id;
+    this.players.delete(id);
+    this._bots?.delete(id);
+    this._latest.delete(id);
+    if (this.rules) this._hostEvents(this.rules.remove(id));
+    if (announce) this._broadcastRoster(false);
+    return true;
+  }
+
   _changeSettings(s) {
     if (!this.host || this.phase !== 'lobby') return;
     const mode = PARTY_MODES[s.mode] ? s.mode : 'ffa';
@@ -239,12 +273,12 @@ export class PartySystem {
       timeLimit: s.timeLimit === 600 ? 600 : 300,
       aimAssist: s.aimAssist ?? 'low',
     };
-    for (const p of this.players.values()) p.ready = false;
+    for (const p of this.players.values()) p.ready = !!p.bot;
     this._broadcastRoster();
   }
 
   _roster() {
-    return [...this.players.values()].map(({ id, team, ready, primary, name }) => ({ id, team, ready, primary, name: name ?? '' }));
+    return [...this.players.values()].map(({ id, team, ready, primary, name, bot }) => ({ id, team, ready, primary, name: name ?? '', bot: !!bot }));
   }
 
   _broadcastRoster(start = true) {
@@ -267,6 +301,7 @@ export class PartySystem {
     const m = { type: 'p.start', settings: this.settings, players: roster, spawns };
     this.link.broadcast(m);
     this._applyStart(m);
+    this._startBots(spawns);
     this._hostEvents(evs);
   }
 
@@ -276,7 +311,7 @@ export class PartySystem {
     const m = { type: 'p.room' };
     this.link?.broadcast(m);
     this._applyRoom();
-    for (const p of this.players.values()) p.ready = false;
+    for (const p of this.players.values()) p.ready = !!p.bot;
     this._broadcastRoster();
   }
 
@@ -357,13 +392,85 @@ export class PartySystem {
     if (n >= (def?.pellets ?? 1)) return; // a shotgun shell lands once per pellet
     this._hitCount.set(key, n + 1);
     if (this._hitCount.size > 512) this._hitCount.delete(this._hitCount.keys().next().value);
-    const base = Math.min(Number(c.amount) || 0, def?.damage ?? 40);
-    const r = applyDamage(this.hp[c.target] ?? MAX_HP, base, c.part);
-    this.hp[c.target] = r.hp;
-    const m = { type: 'p.hp', victim: c.target, attacker: c.shooter, amount: r.amount, hp: r.hp, headshot: c.part === 'head', killed: r.killed, from: c.from, weapon: c.weapon };
+    this._hostDamage(c.shooter, c.target, Math.min(Number(c.amount) || 0, def?.damage ?? 40), c.part, c.from, c.weapon);
+  }
+
+  /** Accepted damage (a player's claim or a bot's shot) -> HP, broadcast, maybe a kill. */
+  _hostDamage(shooter, target, base, part, from, weapon) {
+    const r = applyDamage(this.hp[target] ?? MAX_HP, base, part);
+    this.hp[target] = r.hp;
+    const m = { type: 'p.hp', victim: target, attacker: shooter, amount: r.amount, hp: r.hp, headshot: part === 'head', killed: r.killed, from, weapon };
     this.link.broadcast(m);
     this._applyHp(m);
-    if (r.killed) this._hostEvents(R.kill(c.shooter, c.target).map((e) => (e.type === 'kill' ? { ...e, weapon: c.weapon, headshot: c.part === 'head' } : e)));
+    if (r.killed) this._hostEvents(this.rules.kill(shooter, target).map((e) => (e.type === 'kill' ? { ...e, weapon, headshot: part === 'head' } : e)));
+  }
+
+  // ------------------------------------------------------------ host: bots --
+  _startBots(spawns) {
+    this._bots = new Map();
+    const layout = MAPS[this.settings.map].layout;
+    this._grid = buildGrid(layout);
+    const weapons = this.ctx.peek('weapons');
+    for (const p of this.players.values()) {
+      if (!p.bot) continue;
+      const def = weapons?.states?.get(p.primary)?.def;
+      const b = new Bot({ id: p.id, grid: this._grid, weapon: { id: p.primary, damage: def?.damage ?? 30, cycleTime: def?.cycleTime ?? 0.1, pellets: def?.pellets ?? 1 } });
+      const s = spawns[p.id];
+      if (s) b.place(s.x, s.z, s.yaw);
+      this._bots.set(p.id, b);
+    }
+  }
+
+  _stepBots(dt, raw) {
+    if (!this._bots?.size) return;
+    const physics = this.ctx.peek('physics');
+    const tdm = this.settings.mode === 'tdm';
+    const live = this.rules?.state === 'live';
+    const where = (id) => {
+      if (id === this.me) {
+        const q = this.ctx.peek('player')?.position;
+        return q ? { x: q.x, y: q.y, z: q.z } : null;
+      }
+      const b = this._bots.get(id);
+      if (b) return { x: b.x, y: 0, z: b.z };
+      const s = this._latest.get(id);
+      return s ? { x: s.x, y: s.y, z: s.z } : null;
+    };
+    const los = (a, b) => physics.lineOfSight(this._v1.set(a.x, a.y, a.z), this._v2.set(b.x, b.y, b.z));
+    for (const [id, bot] of this._bots) {
+      bot.alive = this.alive[id] !== false;
+      const me = this.players.get(id);
+      const enemies = [];
+      if (live) {
+        for (const p of this.players.values()) {
+          if (p.id === id || this.alive[p.id] === false || (tdm && p.team === me?.team)) continue;
+          const q = where(p.id);
+          if (q) enemies.push({ id: p.id, ...q });
+        }
+      }
+      // small steps: a slow frame must not carry a bot through a wall
+      let r = {};
+      if (live) for (let left = dt; left > 1e-6 && !r.fire; left -= 0.1) r = bot.update(Math.min(0.1, left), { enemies, los });
+      if (r.fire) {
+        this.botShots = (this.botShots ?? 0) + 1;
+        const seq = (bot._seq = (bot._seq ?? 0) + 1);
+        const out = { type: 'p.fire', id, seq, weapon: bot.weapon.id };
+        this.link.broadcast(out);
+        this._applyFire(out);
+        if (r.fire.hit && this.rules.canHit(id, r.fire.target)) {
+          const base = bot.weapon.damage * (bot.weapon.pellets > 1 ? Math.ceil(bot.weapon.pellets * 0.6) : 1);
+          this._hostDamage(id, r.fire.target, base, r.fire.head ? 'head' : 'body', r.fire.from, bot.weapon.id);
+        }
+      }
+    }
+  }
+
+  _botStates(raw) {
+    const out = [];
+    for (const [id, b] of this._bots ?? []) {
+      out.push({ id, t: raw, x: b.x, y: 0, z: b.z, yaw: b.yaw, pitch: b.pitch, air: false, crouch: false, w: b.weapon.id, rl: false, alive: this.alive[id] !== false });
+    }
+    return out;
   }
 
   /** Rules events -> everyone. Respawns get their spawn point here. */
@@ -372,6 +479,7 @@ export class PartySystem {
       if (ev.type === 'respawn') {
         this.hp[ev.id] = MAX_HP;
         ev.spawn = this._pickSpawn(ev.id);
+        this._bots?.get(ev.id)?.place(ev.spawn.x, ev.spawn.z, ev.spawn.yaw);
       }
       const m = { type: 'p.ev', ev };
       this.link?.broadcast(m);
@@ -389,6 +497,8 @@ export class PartySystem {
         const p = this.ctx.peek('player')?.position;
         return p ? { x: p.x, z: p.z } : null;
       }
+      const b = this._bots?.get(pid);
+      if (b) return { x: b.x, z: b.z };
       const s = this._latest.get(pid);
       return s ? { x: s.x, z: s.z } : null;
     };
@@ -416,6 +526,11 @@ export class PartySystem {
       case 'p.welcome':
         if (Number.isInteger(m.you)) this.me = m.you;
         if (loadName()) this.link?.send({ type: 'p.name', name: loadName() });
+        break;
+      case 'p.full':
+        this.link?.close();
+        this.link = null;
+        this._exit(ERRORS['room-full']);
         break;
       case 'p.busy':
         this.link?.close();
@@ -553,6 +668,7 @@ export class PartySystem {
 
   _teardownMatch() {
     this.live = false;
+    this._bots = null;
     this.ctx.peek('opponent')?.clearParty();
     this.ctx.peek('world')?.load?.('grid');
     const player = this.ctx.peek('player');
@@ -798,7 +914,10 @@ export class PartySystem {
     const wall = performance.now() / 1000;
     const wallDt = Math.min(1, wall - (this._lastWall ?? wall));
     this._lastWall = wall;
-    if (this.host && this.rules) this._hostEvents(this.rules.tick(wallDt));
+    if (this.host && this.rules) {
+      this._hostEvents(this.rules.tick(wallDt));
+      this._stepBots(wallDt, raw);
+    }
     const ui = ctx.peek('ui');
     if (ui?.state && this._roundEndsAt) ui.state.timeLeft = Math.max(0, this._roundEndsAt - wall);
     // dead: the scoreboard, with the respawn countdown
@@ -820,6 +939,10 @@ export class PartySystem {
     // one (each snapshot goes out once), and the host's own
     this._latest.set(0, s);
     this._fresh.set(0, s);
+    for (const b of this._botStates(raw)) {
+      this._fresh.set(b.id, b);
+      this._applyState(b);
+    }
     const fresh = [...this._fresh.values()];
     this._fresh.clear();
     for (const p of this.players.values()) {
