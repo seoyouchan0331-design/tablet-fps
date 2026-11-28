@@ -51,6 +51,15 @@ await B.waitForFunction(() => /\d+ ms/.test(document.querySelector('[data-act="n
   .catch(() => fail('lobby never showed a ping'));
 step('net ' + (await B.evaluate(() => document.querySelector('[data-act="net-info"]')?.textContent)));
 
+// chat: the guest types, the host reads
+await click(B, 'chat-open');
+await B.waitForSelector('[data-act="chat-input"]', { timeout: 10000 });
+await B.fill('[data-act="chat-input"]', 'good luck');
+await click(B, 'chat-send');
+await A.waitForFunction(() => window.__ENGINE__.ctx.peek('chat').lines.some((l) => l.text === 'good luck'), null, { timeout: 15000, polling: 250 })
+  .catch(() => fail('duel chat did not reach the host'));
+step('duel chat ok');
+
 // host setting propagates to the guest
 await click(A, 'rounds-3');
 await waitMatch(B, () => window.__ENGINE__.ctx.peek('match').settings.winTarget === 3, 15000).catch(() => fail('guest did not receive host settings'));

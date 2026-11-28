@@ -34,6 +34,16 @@ const click = (p, act) => p.evaluate((a) => document.querySelector(`[data-act="$
 const waitAct = (p, act, timeout = 60000) => p.waitForSelector(`[data-act="${act}"]`, { timeout });
 const party = (p, fn, arg) => p.evaluate(fn, arg);
 const waitP = (p, pred, timeout = 120000, arg) => p.waitForFunction(pred, arg, { timeout, polling: 250 });
+/** Type a chat line through the UI (team: the TEAM toggle). */
+const say = async (p, text, team = false) => {
+  await click(p, 'chat-open');
+  await waitAct(p, 'chat-input', 10000);
+  if (team) await click(p, 'chat-team');
+  else await click(p, 'chat-all');
+  await p.fill('[data-act="chat-input"]', text);
+  await click(p, 'chat-send');
+};
+const heard = (p, text, timeout = 15000) => waitP(p, (t) => window.__ENGINE__.ctx.peek('chat').lines.some((l) => l.text === t), timeout, text);
 
 // ---- open / join ------------------------------------------------------------
 await waitAct(A, 'party'); await click(A, 'party');
@@ -51,6 +61,11 @@ await Promise.all([A, B, C].map((p) => waitP(p, () => window.__ENGINE__.ctx.peek
 const ids = await Promise.all([A, B, C].map((p) => party(p, () => window.__ENGINE__.ctx.peek('party').me)));
 step(`ids ${ids}`);
 if (ids.join() !== '0,1,2') fail(`ids ${ids}`);
+
+// chat in the room
+await say(B, 'hi everyone');
+await Promise.all([A, C].map((p) => heard(p, 'hi everyone').catch(() => fail('a room chat line did not reach everyone'))));
+step('room chat reached A and C');
 
 // names: A calls itself Alpha; everyone's list shows it
 await A.fill('[data-act="name"]', 'Alpha');
@@ -111,14 +126,14 @@ const scores = await Promise.all([A, B, C].map((p) => party(p, () => JSON.string
 step(`scores ${scores.join(' | ')}`);
 if (new Set(scores).size !== 1 || JSON.parse(scores[0])[0]?.[0] !== 1 || JSON.parse(scores[0])[1]?.[1] !== 1) fail('kill not recorded the same on every side');
 await C.screenshot({ path: 'shots/party-feed.png' });
+const feed = await C.evaluate(() => document.querySelector('.ow-feed')?.textContent ?? '');
+step(`C's kill feed: "${feed.trim()}"`);
+if (!/Alpha\s+▸\s+P2/.test(feed)) fail("the kill (by Alpha) is missing from C's feed");
 const stA = await A.evaluate(() => window.__ENGINE__.ctx.peek('stats').data);
 const stB = await B.evaluate(() => window.__ENGINE__.ctx.peek('stats').data);
 step(`stats: A ${JSON.stringify(stA)} | B ${JSON.stringify(stB)}`);
 if (stA.kills < 1 || stA.xp < 100) fail("A's kill was not counted in its stats");
 if (stB.deaths < 1) fail("B's death was not counted in its stats");
-const feed = await C.evaluate(() => document.querySelector('.ow-feed')?.textContent ?? '');
-step(`C's kill feed: "${feed.trim()}"`);
-if (!/Alpha\s+▸\s+P2/.test(feed)) fail("the kill (by Alpha) is missing from C's feed");
 const board = await B.evaluate(() => window.__ENGINE__.ctx.peek('party').ui.lastBoard ?? '');
 step(`B's scoreboard while dead: "${board.slice(0, 60)}"`);
 if (!/Respawn in/.test(board)) fail('no scoreboard with a respawn countdown on the dead player');
@@ -214,6 +229,17 @@ await A.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(5,
 await B.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-29.5, 0.03, 0));
 const myTeam = await A.evaluate(() => { const P = window.__ENGINE__.ctx.peek('party'); return P.players.get(P.me).team; });
 await waitP(B, (t) => (window.__ENGINE__.ctx.peek('party')._teams?.[t] ?? 0) >= 2, 30000, myTeam).catch(() => fail('holding the hill scored nothing'));
+// team chat stays in the team, all chat reaches everyone (A and B are on different teams)
+await say(B, 'secret plan', true);
+await heard(B, 'secret plan').catch(() => fail('the sender does not see its own team line'));
+await say(B, 'gg all');
+await heard(A, 'gg all').catch(() => fail('an ALL line did not reach the other team'));
+if (await A.evaluate(() => window.__ENGINE__.ctx.peek('chat').lines.some((l) => l.text === 'secret plan'))) fail('a TEAM line leaked to the other team');
+step('team chat stayed in the team; all chat crossed');
+await click(A, 'chat-open');
+await A.fill('[data-act="chat-input"]', 'on my way to the hill');
+await A.screenshot({ path: 'shots/party-chat.png' });
+await A.evaluate(() => window.__ENGINE__.ctx.peek('chat').close());
 const hill = await A.evaluate(() => { const P = window.__ENGINE__.ctx.peek('party'); return { teams: P._teams, ring: P._hill?.material.color.getHexString(), hud: window.__ENGINE__.ctx.peek('ui').state.scoreUs }; });
 step(`hill: ${JSON.stringify(hill)}`);
 if (hill.ring !== '2fd8ff') fail('the hill ring should be cyan (ours) for A');

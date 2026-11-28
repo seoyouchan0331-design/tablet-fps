@@ -19,6 +19,7 @@ export const MSG = Object.freeze({
   PING: 'ping',
   PONG: 'pong',
   NADE: 'nade',
+  CHAT: 'chat',
 });
 
 const TYPES = new Set(Object.values(MSG));

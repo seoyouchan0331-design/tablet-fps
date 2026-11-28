@@ -30,6 +30,7 @@ import { grenadeDamage } from '../weapons/grenades.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
 import { PartyUI, playerName, names, levels, cleanName } from '../ui/party.js';
+import { cleanChat } from '../ui/chat.js';
 
 const NAME_KEY = 'tfps.name';
 const loadName = () => { try { return cleanName(localStorage.getItem(NAME_KEY)); } catch { return ''; } };
@@ -127,6 +128,7 @@ export class PartySystem {
     this.gen = 0;
     this.hostId = 0;
     this._wireHub(this.link);
+    this._attachChat();
     this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName(), lv: this._myLv() });
     this.phase = 'lobby';
     this._broadcastRoster();
@@ -148,6 +150,7 @@ export class PartySystem {
     this.gen = 0;
     this.hostId = 0;
     this._wireGuest(this.link);
+    this._attachChat();
     this.phase = 'lobby';
   }
 
@@ -236,6 +239,7 @@ export class PartySystem {
     this.hostId = this.me;
     for (const p of this.players.values()) delete p.peer;
     this._wireHub(hub);
+    this._chatAt = new Map();
     this._rejoinUntil = performance.now() / 1000 + 20;
     if (this.phase === 'match' || this.phase === 'results') {
       const wall = performance.now() / 1000;
@@ -313,8 +317,46 @@ export class PartySystem {
     this.ctx.peek('player')?.setControlEnabled?.(false);
   }
 
+  // ------------------------------------------------------------------ chat --
+  _attachChat() {
+    this._chatAt = new Map(); // host: id -> last line time (rate limit)
+    this.ctx.peek('chat')?.attach({
+      team: isTeamMode(this.settings.mode),
+      send: (text, team) => {
+        if (this.host) this._hostChat(this.me, text, team);
+        else this.link?.send({ type: 'p.chat', text, team });
+      },
+    });
+  }
+
+  /** Host: a line from player `id` -> everyone (ALL) or the sender's team (TEAM). */
+  _hostChat(id, raw, team) {
+    const from = this.players.get(id);
+    const text = cleanChat(raw);
+    if (!from || !text) return;
+    const now = performance.now() / 1000;
+    if (now - (this._chatAt.get(id) ?? -1) < 0.5) return; // one line every half second
+    this._chatAt.set(id, now);
+    const toTeam = !!team && isTeamMode(this.settings.mode);
+    const out = { type: 'p.chat', id, text, team: toTeam };
+    for (const p of this.players.values()) {
+      if (!p.peer || (toTeam && p.team !== from.team)) continue;
+      this.link.send(p.peer, out);
+    }
+    if (!toTeam || this.players.get(this.me)?.team === from.team) this._applyChat(out);
+  }
+
+  _applyChat(m) {
+    if (!Number.isInteger(m.id)) return;
+    const p = this.players.get(m.id);
+    const tm = isTeamMode(this.settings.mode);
+    const color = m.id === this.me ? '#3df2ff' : tm ? (p?.team === this.players.get(this.me)?.team ? '#3df2ff' : '#ff7a52') : '#ffd25a';
+    this.ctx.peek('chat')?.receive({ from: playerName(m.id), text: m.text, team: !!m.team, mine: m.id === this.me, color });
+  }
+
   /** Back to the main menu (with a message). */
   _exit(msg = '') {
+    this.ctx.peek('chat')?.detach();
     this._teardownMatch();
     this.phase = 'off';
     this.players.clear();
@@ -481,6 +523,9 @@ export class PartySystem {
           if (Number.isInteger(m.lv) && m.lv > 0 && m.lv < 1000) p.lv = m.lv;
           this._broadcastRoster(false);
         }
+        break;
+      case 'p.chat':
+        this._hostChat(id, m.text, !!m.team);
         break;
       case 'p.team':
         if (p && this.phase === 'lobby' && !p.ready && (m.team === 0 || m.team === 1)) {
@@ -749,6 +794,9 @@ export class PartySystem {
       case 'p.roster':
         this._applyRoster(m);
         break;
+      case 'p.chat':
+        this._applyChat(m);
+        break;
       case 'p.start':
         this._applyStart(m);
         break;
@@ -783,6 +831,7 @@ export class PartySystem {
       this.players = new Map(m.players.map((p) => [p.id, { ...p, name: cleanName(p.name) }]));
       if (m.settings) this.settings = m.settings;
     }
+    this.ctx.peek('chat')?.setTeam(isTeamMode(this.settings.mode));
     names.clear();
     levels.clear();
     for (const p of this.players.values()) {
@@ -871,7 +920,7 @@ export class PartySystem {
     }
     const ui = ctx.peek('ui');
     if (ui?.state) {
-      ui.state.mode = tdm ? 'TDM' : 'FFA';
+      ui.state.mode = { ffa: 'FFA', tdm: 'TDM', koth: 'HILL', gun: 'GUN' }[this.settings.mode] ?? 'FFA';
       ui.state.scoreUs = ui.state.scoreThem = 0;
     }
     if (m.late) this._hud();

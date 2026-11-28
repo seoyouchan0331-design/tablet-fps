@@ -32,6 +32,8 @@ import { Loadout } from '../weapons/loadout.js';
 import { MAPS } from '../arena/layout.js';
 import { smoothRtt } from '../net/ice.js';
 import { grenadeDamage } from '../weapons/grenades.js';
+import { cleanChat } from '../ui/chat.js';
+import { cleanName } from '../ui/party.js';
 
 const STATE_HZ = 30;
 /** Both sides ping every second; silence this long means the other device is gone. */
@@ -119,6 +121,7 @@ export class MatchSystem {
 
   // ------------------------------------------------------------------ flow --
   showMenu(error = '') {
+    this.ctx.peek('chat')?.detach();
     this._teardownMatch();
     this.phase = 'menu';
     this.ctx.peek('practice')?.setActive(true);
@@ -206,6 +209,17 @@ export class MatchSystem {
   }
 
   _enterLobby() {
+    // chat: everyone is two people here, so ALL only
+    const myName = () => { try { return cleanName(localStorage.getItem('tfps.name')); } catch { return ''; } };
+    this.ctx.peek('chat')?.attach({
+      team: false,
+      send: (text) => {
+        const t = cleanChat(text);
+        if (!t) return;
+        this._send(MSG.CHAT, { text: t, name: myName() });
+        this.ctx.peek('chat')?.receive({ from: myName() || 'You', text: t, mine: true, color: '#3df2ff' });
+      },
+    });
     this.phase = 'lobby';
     this.ready = { host: false, guest: false };
     this._renderLobby();
@@ -623,6 +637,13 @@ export class MatchSystem {
           this._startMatch();
         }
         break;
+      case MSG.CHAT: {
+        const now = performance.now() / 1000;
+        if (now - (this._chatAt ?? -1) < 0.5) break; // one line every half second
+        this._chatAt = now;
+        this.ctx.peek('chat')?.receive({ from: cleanName(m.name) || 'Opponent', text: m.text, color: '#ff7a52' });
+        break;
+      }
       case MSG.NADE:
         if (this.phase === 'match' && this.live && typeof m.gid === 'string') {
           this._nadeOwner.set(m.gid, this.other);
