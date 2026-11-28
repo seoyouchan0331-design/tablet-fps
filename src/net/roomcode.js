@@ -1,4 +1,4 @@
-/** 4-character room codes without look-alike characters (no 0/O, 1/I). */
+/** Room codes without look-alike characters (no 0/O, 1/I): 4 characters for a duel, 5 for a party. */
 export const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 const cryptoBytes = (n) => {
@@ -7,11 +7,18 @@ const cryptoBytes = (n) => {
   return b;
 };
 
-export function makeRoomCode(randomBytes = cryptoBytes) {
-  const b = randomBytes(4);
+/** A duel room code (4 characters), or a party one (`n` = 5). */
+export function makeRoomCode(randomBytes = cryptoBytes, n = 4) {
+  const b = randomBytes(n);
   let s = '';
-  for (let i = 0; i < 4; i++) s += ROOM_ALPHABET[b[i] % ROOM_ALPHABET.length];
+  for (let i = 0; i < n; i++) s += ROOM_ALPHABET[b[i] % ROOM_ALPHABET.length];
   return s;
+}
+
+/** Party rooms (3-8 players) have 5-character codes. */
+export function isPartyCode(s) {
+  const c = normaliseRoomCode(s);
+  return c.length === 5 && [...c].every((ch) => ROOM_ALPHABET.includes(ch));
 }
 
 export function normaliseRoomCode(s) {

@@ -120,7 +120,7 @@ if (un.overlay !== 'none' || !un.vm) fail('scope picture stuck after release');
 
 // ---- audio --------------------------------------------------------------------
 await p.keyboard.down('KeyW'); await p.waitForTimeout(1200); await p.keyboard.up('KeyW');
-const au = await p.evaluate(() => ({ ...window.__AUDIO__.report(), duel: typeof window.__AUDIO__._oppStep === 'object' && !('ambience' in window.__AUDIO__) }));
+const au = await p.evaluate(() => ({ ...window.__AUDIO__.report(), duel: typeof window.__AUDIO__._step === 'function' && !('ambience' in window.__AUDIO__) }));
 console.log('audio', JSON.stringify(au));
 if (!au.duel) fail('old audio engine still loaded');
 if (!au.started) fail('audio did not start on a gesture');

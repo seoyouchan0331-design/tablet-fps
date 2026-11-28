@@ -20,11 +20,13 @@ const SUITES = {
   phone: 'tools/phone-e2e.mjs',
   dev: 'tools/dev-e2e.mjs',
   walk: 'tools/walk-e2e.mjs',
+  party: 'tools/party-e2e.mjs',
 };
 
 /** Which suites a changed path needs. */
 const RULES = [
   [/^src\/(match|net|opponent)\//, ['duel', 'stall']],
+  [/^src\/(party|net|opponent|match)\/|^src\/ui\/(party|lobby)\.js/, ['party']],
   [/^src\/(weapons|audio)\/|^src\/ui\/(scope|loadout|lobby)\.js|^public\/sfx\//, ['weapons']],
   [/^src\/(weapons|physics|opponent|practice)\//, ['hitreg']],
   [/^src\/(ui|core\/(input|settings))/, ['controls', 'smoke', 'phone']],

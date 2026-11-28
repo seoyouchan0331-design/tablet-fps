@@ -12,6 +12,7 @@ import { ArenaSystem } from './arena/index.js';
 import { PracticeSystem } from './practice/index.js';
 import { OpponentSystem } from './opponent/index.js';
 import { MatchSystem } from './match/index.js';
+import { PartySystem } from './party/index.js';
 import { PhysicsSystem } from './physics/index.js';
 import { PlayerSystem } from './player/index.js';
 import { WeaponSystem } from './weapons/index.js';
@@ -75,7 +76,8 @@ engine
   .add(FxSystem)
   .add(UiSystem)
   .add(DuelAudioSystem)
-  .add(MatchSystem);
+  .add(MatchSystem)
+  .add(PartySystem);
 if (!lite) engine.add(SkySystem);
 
 try {

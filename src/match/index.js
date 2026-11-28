@@ -18,7 +18,7 @@
  */
 import * as THREE from 'three';
 import { MSG } from '../net/protocol.js';
-import { makeRoomCode, isRoomCode, normaliseRoomCode } from '../net/roomcode.js';
+import { makeRoomCode, isRoomCode, isPartyCode, normaliseRoomCode } from '../net/roomcode.js';
 import { BroadcastTransport } from '../net/transport.js';
 import { RoundsMode } from './rounds.js';
 import { validateHit, HitLedger } from './validate.js';
@@ -83,6 +83,7 @@ export class MatchSystem {
     this.lobby = new Lobby(document.getElementById('ui') ?? document.body, {
       practice: () => this.startPractice(),
       create: () => this.createRoom(),
+      party: () => this.ctx.peek('party')?.create(),
       join: (code) => this.joinRoom(code),
       ready: (primary) => this.setReady(primary),
       settings: (s) => this.changeSettings(s),
@@ -134,7 +135,8 @@ export class MatchSystem {
 
   async joinRoom(raw) {
     const code = normaliseRoomCode(raw);
-    if (!isRoomCode(code)) return this.lobby.showJoin('Codes are 4 letters/numbers, like K7QP.');
+    if (isPartyCode(code) && this.ctx.peek('party')) return this.ctx.peek('party').join(code); // 5 characters: a party room
+    if (!isRoomCode(code)) return this.lobby.showJoin('Codes are 4 letters/numbers (a duel, like K7QP) or 5 (a party).');
     this.role = 'guest';
     this.code = code;
     this.phase = 'connecting';

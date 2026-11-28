@@ -4,8 +4,8 @@
  * choices through the `on` handlers. Every control carries a `data-act`
  * attribute so tools/duel-e2e.mjs can find it.
  *
- *   menu     PRACTICE · CREATE ROOM · JOIN
- *   join     4-character code field · JOIN · BACK
+ *   menu     1v1 ROOM · PARTY ROOM (ui/party.js) · JOIN · PRACTICE
+ *   join     code field (4 = duel, 5 = party) · JOIN · BACK
  *   lobby    room code · host settings (aim assist, rounds) · loadout · READY
  *   results  WIN / LOSE · score · REMATCH · LEAVE
  */
@@ -29,7 +29,7 @@ const CSS = `
 .ow-lobby button.on { border-color: #3df2ff; background: rgba(61,242,255,.22); }
 .ow-lobby button:disabled { opacity: .45; }
 .ow-lobby .code { font: 800 64px ui-monospace,monospace; letter-spacing: .2em; color: #3df2ff; }
-.ow-lobby input { width: 220px; height: 64px; border-radius: 12px; border: 2px solid rgba(61,242,255,.5); background: #0d1418;
+.ow-lobby input { width: 260px; height: 64px; border-radius: 12px; border: 2px solid rgba(61,242,255,.5); background: #0d1418;
   color: #e8f4f8; font: 800 40px ui-monospace,monospace; letter-spacing: .3em; text-align: center; text-transform: uppercase; }
 .ow-lobby .label { font-size: 13px; color: #a9bcc4; letter-spacing: .08em; }
 .ow-lobby .score { font: 800 56px ui-monospace,monospace; }
@@ -98,9 +98,10 @@ export class Lobby {
   showMenu(error = '') {
     this._clear();
     el('h2', null, this.root, 'Tablet FPS');
-    el('div', 'sub', this.root, '1v1 with a friend — same Wi-Fi or anywhere online — or practice on your own.');
+    el('div', 'sub', this.root, '1v1 with a friend, a party of up to 8 — same Wi-Fi or anywhere online — or practice on your own.');
     const row = el('div', 'row', this.root);
-    this._btn(row, 'CREATE ROOM', 'create', () => this.on.create(), true);
+    this._btn(row, '1v1 ROOM', 'create', () => this.on.create(), true);
+    this._btn(row, 'PARTY ROOM', 'party', () => this.on.party?.(), true);
     this._btn(row, 'JOIN', 'join', () => this.showJoin());
     this._btn(row, 'PRACTICE', 'practice', () => this.on.practice());
     el('div', 'err', this.root, error);
@@ -109,9 +110,9 @@ export class Lobby {
   showJoin(error = '') {
     this._clear();
     el('h2', null, this.root, 'Join a room');
-    el('div', 'sub', this.root, "Enter the 4-character code on your friend's screen.");
+    el('div', 'sub', this.root, "Enter the code on your friend's screen: 4 characters for a 1v1, 5 for a party.");
     const input = el('input', null, this.root);
-    input.maxLength = 4;
+    input.maxLength = 5;
     input.autocapitalize = 'characters';
     input.autocomplete = 'off';
     input.spellcheck = false;

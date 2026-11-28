@@ -78,9 +78,10 @@ export class Avatar {
   /**
    * @param {THREE.Scene} scene
    * @param {object} physics  the physics system (addCollider / removeCollider / LAYER)
-   * @param {{ owner?: object, name?: string, lite?: boolean, model?: object|null, clone?: Function }} opts
+   * @param {{ owner?: object, name?: string, lite?: boolean, model?: object|null, clone?: Function, accent?: number }} opts
    *   owner is reported as the hit actor; lite = no HDR glow; model = glTF from
-   *   loadCharacterModel() with `clone` = SkeletonUtils.clone
+   *   loadCharacterModel() with `clone` = SkeletonUtils.clone; accent = the
+   *   robot's colour band (enemy orange by default, teammates cyan)
    */
   constructor(scene, physics, opts = {}) {
     this.scene = scene;
@@ -103,7 +104,7 @@ export class Avatar {
     this.clip = null;
     this._owned = [];
 
-    if (opts.model && opts.clone) this._buildRobot(opts.model, opts.clone);
+    if (opts.model && opts.clone) this._buildRobot(opts.model, opts.clone, opts);
     else this._buildMannequin(opts);
     this._buildGuns();
     scene.add(this.root);
@@ -114,7 +115,7 @@ export class Avatar {
     this.colliders = [this.head, this.body];
   }
 
-  _buildRobot(gltf, clone) {
+  _buildRobot(gltf, clone, opts = {}) {
     const model = clone(gltf.scene);
     model.scale.setScalar(ROBOT_SCALE);
     model.rotation.y = Math.PI; // the robot faces +Z; our yaw 0 faces -Z
@@ -123,7 +124,7 @@ export class Avatar {
       o.castShadow = true;
       o.frustumCulled = false; // skinned bounds don't follow the animation
       const m = o.material.clone();
-      if (m.name === 'Main') m.color.setHex(ACCENT);
+      if (m.name === 'Main') m.color.setHex(opts.accent ?? ACCENT);
       o.material = m;
       this._owned.push(m);
     });

@@ -46,7 +46,6 @@ export class DuelAudioSystem {
     this._shots = null; // profile -> AudioBuffer[]
     this._steps = null; // kind -> AudioBuffer[]
     this._n = 0;
-    this._oppStep = { x: 0, z: 0, acc: 0, had: false };
   }
 
   async init(ctx) {
@@ -263,28 +262,34 @@ export class DuelAudioSystem {
     if (list) this._voice(list[this._n % list.length], at, level);
   }
 
-  /** Opponent footsteps from how far their avatar has moved on the ground. */
+  /** Other players' footsteps from how far each avatar has moved on the ground. */
   update() {
     if (!this.running) return;
-    const av = this.ctx.peek('opponent')?.avatar;
-    const s = this._oppStep;
-    if (!av || !av.root?.visible || !av.alive || av._air) {
-      s.had = false;
-      return;
+    const others = this.ctx.peek('opponent')?.others ?? [];
+    const steps = this._oppSteps ?? (this._oppSteps = new Map());
+    for (const r of others) {
+      const av = r.avatar;
+      let s = steps.get(av);
+      if (!s) steps.set(av, (s = { x: 0, z: 0, acc: 0, had: false }));
+      if (!av.root?.visible || !av.alive || av._air) {
+        s.had = false;
+        continue;
+      }
+      const p = av.position;
+      if (!s.had) {
+        s.x = p.x; s.z = p.z; s.acc = 0; s.had = true;
+        continue;
+      }
+      const d = Math.hypot(p.x - s.x, p.z - s.z);
+      s.x = p.x; s.z = p.z;
+      if (d > 3) continue; // a respawn teleport, not a stride
+      s.acc += d;
+      if (s.acc >= STRIDE) {
+        s.acc = 0;
+        this._step('run', p, 1.1);
+      }
     }
-    const p = av.position;
-    if (!s.had) {
-      s.x = p.x; s.z = p.z; s.acc = 0; s.had = true;
-      return;
-    }
-    const d = Math.hypot(p.x - s.x, p.z - s.z);
-    s.x = p.x; s.z = p.z;
-    if (d > 3) return; // a respawn teleport, not a stride
-    s.acc += d;
-    if (s.acc >= STRIDE) {
-      s.acc = 0;
-      this._step('run', p, 1.1);
-    }
+    if (steps.size > others.length) for (const k of [...steps.keys()]) if (!others.some((r) => r.avatar === k)) steps.delete(k);
   }
 
   /* ---- old API, kept so callers never break ------------------------------ */

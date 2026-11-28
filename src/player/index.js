@@ -228,10 +228,11 @@ export class PlayerSystem {
       err: { yaw: 0, pitch: 0 }, vel: { yaw: 0, pitch: 0 }, prevYaw: 0, prevPitch: 0, has: false,
       target: new THREE.Vector3(),
     });
-    // The duel opponent while a match is on, otherwise the practice dummy.
+    // In a duel or a party: the living enemy nearest the crosshair;
+    // otherwise the practice dummy.
     const opp = this.ctx.peek('opponent');
     const pr = this.ctx.peek('practice');
-    const avatar = opp?.visible ? opp.avatar : pr?.active !== false ? pr?.avatar : null;
+    const avatar = opp?.others?.length ? opp.aimTarget(this.eyePosition, this.movement.yaw) : pr?.active !== false ? pr?.avatar : null;
     const level = this.ctx.config.aimAssist ?? 'off';
     if (!avatar?.alive || level === 'off') {
       st.has = false;
@@ -712,6 +713,16 @@ export class PlayerSystem {
     this.rig.fov = this.ctx.config.fov;
     this._lookFrame = this.ctx.time.frame;
     this._prev.state = '';
+  }
+
+  /** Respawn at a point (party mode: the host picks spawns anywhere on the map). */
+  respawnAt(x, z, yaw = 0) {
+    this.health.reset(true);
+    const gy = this.physics.groundHeight(x, z, 2.5); // spawn points are open ground: never a roof
+    this.movement.yaw = yaw;
+    this.movement.pitch = 0;
+    this.movement.teleport(x, Number.isFinite(gy) ? gy + 0.03 : 0.03, z);
+    this.rig.reset(STANCE.stand.eye);
   }
 
   respawn(index = 0) {

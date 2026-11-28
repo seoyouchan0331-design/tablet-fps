@@ -188,7 +188,7 @@ export class PauseMenu {
     document.exitPointerLock?.();
     const t = this.ctx.time;
     // In a live duel the other player keeps playing: never freeze game time.
-    const inDuel = this.ctx.peek('match')?.phase === 'match';
+    const inDuel = this.ctx.peek('match')?.phase === 'match' || this.ctx.peek('party')?.phase === 'match';
     if (t && !inDuel) {
       this._prevScale = t.scale;
       t.scale = 0;
