@@ -77,6 +77,7 @@ for (const id of ['grid', 'lanes', 'blocks', 'field', 'town', 'canal', 'skybase'
         for (const b of L.boxes) {
           if (b.floor || b.wall) continue;
           if (b.y - b.h / 2 > (s.y ?? 0) + 2.2) continue; // overhead (a spawn inside a hangar)
+          if (b.y + b.h / 2 < (s.y ?? 0) + 0.05) continue; // under the floor (a sky deck's underside)
           const inside = insideXZ(b, x, s.z, 0.4);
           assert.ok(!inside, `${id}: box at ${b.x},${b.z} blocks the spawn lane at x=${x}`);
         }

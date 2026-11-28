@@ -296,8 +296,8 @@ export const SKYBASE = {
     far: FAR,
     boxes: [...SHELL, ...DECK, ...CENTRE, ...HALF, ...HALF.map(mirror)],
     spawns: [
-      { x: 22.4, y: 0, z: -16.5, yaw: Math.PI / 2 },
-      { x: -22.4, y: 0, z: 16.5, yaw: -Math.PI / 2 },
+      { x: 22.4, y: 0, z: -15.6, yaw: Math.PI / 2 },
+      { x: -22.4, y: 0, z: 15.6, yaw: -Math.PI / 2 },
     ],
   },
 };
