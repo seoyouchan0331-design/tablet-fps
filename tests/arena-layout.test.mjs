@@ -118,8 +118,52 @@ test('town: long map with walk-in two-storey houses, Blender props, a ramp to cl
   assert.ok(L.size > (L.depth ?? L.size), 'longer than deep');
   assert.ok(!L.boxes.some((b) => b.c != null), 'grey-box style: no painted pieces');
   assert.ok(L.boxes.filter((b) => b.ramp).length >= 4, 'stairs in the houses');
-  assert.ok(L.boxes.some((b) => b.prop === 'arch') && L.boxes.some((b) => b.prop === 'fountain'));
+  assert.ok(['archbay', 'fountain', 'towerroof', 'balustrade', 'pier'].every((n) => L.boxes.some((b) => b.prop === n)), 'arcade, fountain, tower');
   const stair = L.boxes.find((b) => b.ramp);
   assert.ok(stair.y + stair.h / 2 >= 3, 'stairs reach the upper floor');
   assert.ok(['cratestack', 'stall', 'coverwall', 'planter'].every((n) => L.boxes.some((b) => b.prop === n)), 'modelled plaza cover');
+});
+
+/** Solid (collides) pieces whose box holds the point. */
+const solidsAt = (L, x, y, z, skip) => L.boxes.filter((b) => b !== skip && !b.deco && !b.floor && insideXZ(b, x, z) && y > b.y - b.h / 2 + 0.02 && y < (b.ramp ? topAt(b, x, z) : b.y + b.h / 2) - 0.02);
+
+test('town: every flight of stairs has headroom (nothing over its walking line)', () => {
+  const L = MAPS.town.layout;
+  for (const r of L.boxes.filter((b) => b.ramp)) {
+    for (const k of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+      // a point k along the ramp, on its centre line
+      const ax = r.ramp[1] === 'x', s = r.ramp[0] === '+' ? 1 : -1;
+      const x = ax ? r.x + s * (k - 0.5) * r.w : r.x, z = ax ? r.z : r.z + s * (k - 0.5) * r.d;
+      const y = topAt(r, x, z);
+      for (const h of [0.3, 1.0, 1.75]) {
+        // (the tower roof's box spans the tower; only its corner posts are solid)
+        const hit = solidsAt(L, x, y + h, z, r).filter((b) => !b.ramp && b.prop !== 'towerroof');
+        assert.deepEqual(hit.map((b) => b.prop ?? `${b.x.toFixed(1)},${b.y.toFixed(1)},${b.z.toFixed(1)}`), [], `ramp at ${r.x.toFixed(1)},${r.z.toFixed(1)} k=${k} h=${h}`);
+      }
+    }
+  }
+});
+
+test('town: the tower climbs 0 -> 1.6 -> 3.2 -> 4.8 -> 6.4 and its platform has a parapet', () => {
+  const L = MAPS.town.layout;
+  const inTower = (b) => b.x > 21.5 && b.x < 27.5 && b.z > 15.5 && b.z < 21.5;
+  const ramps = L.boxes.filter((b) => b.ramp && inTower(b)).map((b) => [b.y - b.h / 2, b.y + b.h / 2]);
+  assert.deepEqual(ramps.map(([a, b]) => [+a.toFixed(2), +b.toFixed(2)]).sort((p, q) => p[0] - q[0]), [[0, 1.6], [1.6, 3.2], [3.2, 4.8], [4.8, 6.4]]);
+  // standing on the platform by the parapet, a crouched player (1 m) is covered on each face
+  for (const [x, z] of [[24.5, 15.6], [24.5, 21.4], [21.6, 18.5], [27.4, 18.5]]) {
+    assert.ok(solidsAt(L, x, 6.4 + 0.5, z).length > 0, `parapet at ${x},${z}`);
+  }
+});
+
+test('town: the arcade gallery and the bridge each have two ways off', () => {
+  const L = MAPS.town.layout;
+  // gallery (y 3.2, x -9..9, z ~21): the stair head at +x, the house door at -x
+  const stairHead = L.boxes.find((b) => b.ramp === '-x' && Math.abs(b.x - 11.8) < 0.1 && b.z > 21);
+  assert.ok(stairHead && Math.abs(stairHead.y + stairHead.h / 2 - 3.2) < 1e-6, 'gallery stair');
+  assert.equal(solidsAt(L, -9.1, 3.2 + 1.0, 21.3).length, 0, 'upper door from the gallery into the house');
+  // bridge ends: open doors into both gateway houses at the upper floor
+  assert.equal(solidsAt(L, 22, 3.2 + 1.0, 4.2).length, 0, 'north house door');
+  assert.equal(solidsAt(L, 22, 3.2 + 1.0, -4.2).length, 0, 'south house door');
+  // and the passage under it is open
+  assert.equal(solidsAt(L, 22, 1.0, 0).length, 0, 'passage under the bridge');
 });

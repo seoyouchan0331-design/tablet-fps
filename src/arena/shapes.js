@@ -179,7 +179,8 @@ export function wallWithOpenings({ axis = 'x', from, to, at, y0 = 0, h = 3, t = 
 
 /**
  * A two-storey building, axis-aligned, centred on (x, z), w x d metres.
- *   doors:   [{ side: '+x'|'-x'|'+z'|'-z', at, w = 1.6 }]   ground floor
+ *   doors:   [{ side: '+x'|'-x'|'+z'|'-z', at, w = 1.6, floor = 0 }]
+ *            (floor 1: an upper door, onto a bridge or a gallery)
  *   windows: [{ side, floor: 0|1, at, w = 1.4 }]
  *   stair:   '+x' | '-x'  which way the inside stairs climb (along x, against
  *            a long inner wall with no door in the way); the upper slab has a
@@ -191,7 +192,7 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
   const hw = w / 2, hd = d / 2;
   const out = [];
   const opens = (side, floor) => [
-    ...(floor === 0 ? doors.filter((o) => o.side === side).map((o) => ({ c: o.at, w: o.w ?? 1.6, bottom: 0, top: 2.4 })) : []),
+    ...doors.filter((o) => o.side === side && (o.floor ?? 0) === floor).map((o) => ({ c: o.at, w: o.w ?? 1.6, bottom: 0, top: 2.4 })),
     ...windows.filter((o) => o.side === side && (o.floor ?? 1) === floor)
       .map((o) => (ornate
         ? { c: o.at, w: 1.4, bottom: 1.0, top: 2.2 }
@@ -224,7 +225,10 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
     const zA = wall === '-z' ? z - hd : z + hd - t - sw, zB = zA + t + sw; // stair band incl. wall
     return doors.some((o) => {
       const half = (o.w ?? 1.6) / 2 + 0.15;
-      if (o.side === wall) return x + o.at + half > r0 && x + o.at - half < r0 + run; // door in the wall behind the stairs
+      // a door in the wall behind the stairs: on the ground it opens onto
+      // the steps, upstairs over the hole
+      if (o.side === wall) return x + o.at + half > r0 && x + o.at - half < r0 + run;
+      if ((o.floor ?? 0) !== 0) return false; // upstairs, the stair head is a landing
       const highEnd = dir === '+x' ? '+x' : '-x';
       if (o.side === highEnd) return z + o.at + half > zA && z + o.at - half < zB; // door at the stair head
       return false;
@@ -302,8 +306,9 @@ function ornament({ x, z, w, d, fh, slab, doors, windows }) {
   }
   for (const o of doors) {
     const f = face[o.side](o.at);
-    out.push(prop('doorframe', f.px, f.pz, f.ry, 0, { deco: true }));
-    if (o.awning) out.push(prop('awning', f.px, f.pz, f.ry, 3.05, { deco: true }));
+    const y0 = (o.floor ?? 0) * fh;
+    out.push(prop('doorframe', f.px, f.pz, f.ry, y0, { deco: true }));
+    if (o.awning) out.push(prop('awning', f.px, f.pz, f.ry, y0 + 3.05, { deco: true }));
   }
   return out;
 }

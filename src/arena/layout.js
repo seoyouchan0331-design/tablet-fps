@@ -10,6 +10,7 @@
  * 1.6, ledges 1.5, high deck 2.4, pillars 4.
  */
 import { mirrorPiece as mirror, windowWall, building, prop } from './shapes.js';
+import { arcade, bridge, tower, flight, parapet } from './town.js';
 const SIZE = 30;
 const H = SIZE / 2;
 
@@ -147,60 +148,95 @@ const FIELD_HALF = [
 ];
 
 /**
- * TOWN — an original plaza town in the grey-box style, 64 x 36 m, longer
- * than deep. A sculpted fountain in the middle of the plaza (Blender),
- * two-storey houses around it you can walk into and climb (doors, windows on
- * both floors, inside stairs), arched gateways (Blender) between the plaza
- * and each spawn courtyard, turned market crates and a street behind the
- * houses on each long side. The plaza's cover is modelled too: crate
- * stacks, a market stall, low stone walls and a hedge planter.
+ * TOWN — an original plaza town in the grey-box style, 72 x 48 m. Each half
+ * (the other is its 180-degree twin):
+ *   - a two-level arcade closing the plaza's long side: arches below, an
+ *     open gallery above, a stair at one end and a house at the other (its
+ *     upper door opens onto the gallery, so the gallery is no dead end);
+ *   - a gateway between the plaza and the spawn: two houses joined at the
+ *     upper floor by a covered bridge, the main lane running under it;
+ *   - a watch tower by the spawn, stairs inside to a sniper platform;
+ *   - a stepped terrace street on the other flank: two raised levels behind
+ *     parapets, reached from the spawn and from the plaza;
+ *   - plaza cover modelled in Blender: crate stacks, a stall, low stone
+ *     walls, a hedge planter, a bench, round the fountain.
  */
-const TOWN_W = 64;
-const TOWN_D = 36;
+const TOWN_W = 72;
+const TOWN_D = 48;
+const TZ = TOWN_D / 2 - 1; // inner face of the long walls
+const TX = TOWN_W / 2 - 1;
+const TERRACE_FRONT = -16;
 const TOWN_HALF = [
-  // corner house south-east of the plaza: door to the plaza, windows on both floors
+  // arcade on the north side, its stair at the +x end
+  ...arcade({ x: 0, zf: 18.8, zb: TZ }),
+  // the house at the arcade's -x end: its upper door is the gallery's second way out
   ...building({
-    x: 12, z: -10, w: 10, d: 7.5, stair: '+x', ornate: true,
-    doors: [{ side: '+z', at: -2.5, awning: true }, { side: '-x', at: 0.8 }],
-    windows: [
-      { side: '+z', floor: 1, at: -2.5, balcony: true }, { side: '+z', floor: 1, at: 2.5 }, { side: '+z', floor: 0, at: 2.5 },
-      { side: '+x', floor: 1, at: 0 }, { side: '-x', floor: 1, at: -1.5 },
-    ],
+    x: -13.2, z: 19, w: 8.4, d: 8, stair: '-x', ornate: true,
+    doors: [{ side: '-z', at: 0, awning: true }, { side: '+x', at: 2.3 }, { side: '+x', at: 2.3, floor: 1 }],
+    windows: [{ side: '-z', floor: 1, at: -2.2, balcony: true }, { side: '-z', floor: 1, at: 2.2 }, { side: '-z', floor: 0, at: 2.6 }, { side: '-x', floor: 1, at: 0 }],
   }),
-  // house north-east of the plaza
+  // gateway: two houses, a covered bridge between their upper floors
   ...building({
-    x: 13, z: 10, w: 9, d: 8, stair: '-x', ornate: true,
-    doors: [{ side: '-z', at: 1.5, awning: true }],
-    windows: [
-      { side: '-z', floor: 1, at: -2, balcony: true }, { side: '-z', floor: 1, at: 2 }, { side: '-x', floor: 1, at: 0 },
-      { side: '-x', floor: 0, at: -1.5 }, { side: '+x', floor: 1, at: 1 },
-    ],
+    x: 22, z: 7.5, w: 8, d: 7, stair: '+x', ornate: true,
+    doors: [{ side: '-x', at: 0, awning: true }, { side: '+x', at: 0 }, { side: '-z', at: 2.5 }, { side: '-z', at: 0, floor: 1 }],
+    windows: [{ side: '-x', floor: 1, at: -2, balcony: true }, { side: '-x', floor: 1, at: 2 }, { side: '+z', floor: 1, at: -2 }, { side: '+z', floor: 1, at: 2 }, { side: '+x', floor: 1, at: 2 }],
   }),
-  // tall corner house by the spawn courtyard, overlooking the street
   ...building({
-    x: 25.5, z: -12.6, w: 9, d: 7.2, stair: '-x', ornate: true,
-    doors: [{ side: '+z', at: -1.5 }],
-    windows: [{ side: '+z', floor: 1, at: 1.5, balcony: true }, { side: '-x', floor: 1, at: 0 }, { side: '+x', floor: 1, at: 0 }],
+    x: 22, z: -7.5, w: 8, d: 7, stair: '-x', ornate: true,
+    doors: [{ side: '-x', at: 0 }, { side: '+x', at: 0, awning: true }, { side: '+z', at: -2.5 }, { side: '+z', at: 0, floor: 1 }],
+    windows: [{ side: '-x', floor: 1, at: 2, balcony: true }, { side: '-z', floor: 1, at: -2 }, { side: '-z', floor: 1, at: 2 }, { side: '+x', floor: 1, at: -2 }],
   }),
-  // arched gateway between the plaza and the spawn courtyard
-  prop('arch', 19.5, 0, Math.PI / 2),
-  // spawn courtyard walls (the courtyard opens toward the plaza through the arch and its sides)
-  { x: 27.5, y: 1.6, z: 6.5, w: 7, h: 3.2, d: 0.6 },
-  { x: 27.5, y: 1.6, z: -6.5, w: 7, h: 3.2, d: 0.6 },
-  // a three-arch colonnade closing the plaza's long side: cover with windows to shoot through
-  prop('colonnade', 0, 13.2, Math.PI),
-  // bell tower in the corner: the town's landmark
-  { ...prop('belltower', 29, 13.5), sym: true },
-  // market: a stacked crate pile (chest and head-high cover), a lone crate
-  // and a stall whose counter is waist-high cover (all Blender props)
+  ...bridge({ x: 22, z0: -4, z1: 4 }),
+  // watch tower by the spawn, a little cover at its foot
+  ...tower({ x: 24.5, z: 18.5 }),
+  prop('crate', 20.6, 13.9, 0.4),
+  prop('planter', 30, 14.6),
+  // stepped terrace street (south-east): facades along the wall, two levels
+  { x: 19.7, y: 3.2, z: -22.7, w: 4.6, h: 6.4, d: 0.6, noEdge: true },
+  { x: 25.5, y: 4.0, z: -22.7, w: 7, h: 8.0, d: 0.6, noEdge: true },
+  { x: 32, y: 4.8, z: -22.7, w: 6, h: 9.6, d: 0.6, noEdge: true },
+  { x: 19.7, y: 6.5, z: -22.6, w: 4.6, h: 0.2, d: 0.8 },
+  { x: 25.5, y: 8.1, z: -22.6, w: 7, h: 0.2, d: 0.8 },
+  { x: 32, y: 9.7, z: -22.6, w: 6, h: 0.2, d: 0.8 },
+  prop('doorframe', 19.7, -22.4, 0, 0, { deco: true }),
+  prop('window', 19.7, -22.4, 0, 4.2, { deco: true }),
+  prop('balcony', 19.7, -22.4, 0, 3.25, { deco: true }),
+  prop('doorframe', 24, -22.4, 0, 1.6, { deco: true }),
+  prop('doorframe', 27.2, -22.4, 0, 1.6, { deco: true }),
+  prop('awning', 27.2, -22.4, 0, 4.65, { deco: true }),
+  prop('window', 24, -22.4, 0, 5.8, { deco: true }),
+  prop('balcony', 24, -22.4, 0, 4.85, { deco: true }),
+  prop('window', 27.2, -22.4, 0, 5.8, { deco: true }),
+  prop('doorframe', 32, -22.4, 0, 3.2, { deco: true }),
+  prop('window', 32, -22.4, 0, 7.4, { deco: true }),
+  prop('balcony', 32, -22.4, 0, 6.45, { deco: true }),
+  { x: 25.5, y: 0.8, z: (-22.4 + TERRACE_FRONT) / 2, w: 7, h: 1.6, d: TERRACE_FRONT + 22.4, noEdge: true },
+  { x: 32, y: 1.6, z: (-22.4 + TERRACE_FRONT) / 2, w: 6, h: 3.2, d: TERRACE_FRONT + 22.4, noEdge: true },
+  { x: 25.5, y: 1.56, z: TERRACE_FRONT + 0.04, w: 7, h: 0.08, d: 0.08 },
+  ...flight({ x: 19.2, z: TERRACE_FRONT - 1, dir: '+x', y0: 0, w: 2 }),
+  ...flight({ x: 26.2, z: TERRACE_FRONT - 1, dir: '+x', y0: 1.6, w: 2 }),
+  ...parapet({ x0: 22, z0: TERRACE_FRONT + 0.15, x1: 26.2, z1: TERRACE_FRONT + 0.15, y0: 1.6 }),
+  ...parapet({ x0: 29, z0: TERRACE_FRONT + 0.15, x1: 33.4, z1: TERRACE_FRONT + 0.15, y0: 3.2 }),
+  ...flight({ x: 34.2, z: TERRACE_FRONT + 5.6, dir: '-z', rise: 3.2 }),
+  // plaza cover: crate pile, stall, lone crate, bench, hedge planter
   prop('cratestack', 6, 3.5, Math.PI / 4),
   prop('stall', 4, -7.2, -Math.PI / 6),
   prop('crate', 9.5, 0.5, 0.3),
-  // low stone walls flanking the arch: stand to shoot over, crouch to hide
-  prop('coverwall', 16.5, 3.2, Math.PI / 2, 0, { sx: 2.4 }),
-  prop('coverwall', 16.5, -3.2, Math.PI / 2, 0, { sx: 2.4 }),
-  // street planter with a clipped hedge: crouch cover
+  prop('bench', 0, 4.6),
   prop('planter', 0, -11, 0, 0, { sx: 2 }),
+  prop('cratestack', 12.5, 12.5, -0.3),
+  // low stone walls at the gateway's mouth, and one shielding the spawn
+  prop('coverwall', 16.4, 3.2, Math.PI / 2, 0, { sx: 2.4 }),
+  prop('coverwall', 16.4, -3.2, Math.PI / 2, 0, { sx: 2.4 }),
+  prop('coverwall', 26.9, 2.3, Math.PI / 2, 0, { sx: 1.6 }),
+];
+// invisible walls on top of the outer walls: from the tower or the terrace a
+// jump must not carry anyone out of the map
+const TOWN_CEILING = [
+  { x: 0, y: 12, z: TZ + 0.5, w: TOWN_W, h: 14, d: 1, hidden: true },
+  { x: 0, y: 12, z: -(TZ + 0.5), w: TOWN_W, h: 14, d: 1, hidden: true },
+  { x: TX + 0.5, y: 12, z: 0, w: 1, h: 14, d: TOWN_D - 2, hidden: true },
+  { x: -(TX + 0.5), y: 12, z: 0, w: 1, h: 14, d: TOWN_D - 2, hidden: true },
 ];
 
 export const MAPS = {
@@ -225,20 +261,21 @@ export const MAPS = {
   },
   town: {
     label: 'TOWN',
-    note: 'Plaza town — walk into two-storey houses',
-    roundTime: 40,
+    note: 'Plaza town — arcade, bridge, tower, terraces',
+    roundTime: 45,
     layout: {
       size: TOWN_W,
       depth: TOWN_D,
       boxes: [
         ...shell(TOWN_W, TOWN_D),
+        ...TOWN_CEILING,
         { ...prop('fountain', 0, 0), sym: true }, // its own twin
         ...TOWN_HALF,
         ...TOWN_HALF.map(mirror),
       ],
       spawns: [
-        { x: 27, y: 0, z: 0, yaw: Math.PI / 2 },
-        { x: -27, y: 0, z: 0, yaw: -Math.PI / 2 },
+        { x: 29.5, y: 0, z: 0, yaw: Math.PI / 2 },
+        { x: -29.5, y: 0, z: 0, yaw: -Math.PI / 2 },
       ],
     },
   },

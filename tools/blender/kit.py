@@ -402,3 +402,93 @@ for k in range(6):
 neon(SWD + 0.1, N, N, f=SDP / 2 + 0.07, z=1.0)
 export('stall')
 print('kit+ done ->', out)
+
+# ------------------------------------------------------------- arch bay ----
+# One 3.6 m bay of the arcade's ground floor: a 2.9 m wall with a round arch
+# 2.4 wide and 2.7 to the crown, half a pier each side (two bays make a
+# 1.2 m pier: cover), plinths, imposts, a keystone and a band on top. Free
+# standing, 0.8 thick, centred; its front (+Z) carries the neon arch line.
+reset()
+BW, BH, BT = 3.6, 2.9, 0.8
+AW, AC = 2.4, 2.7
+spring = AC - AW / 2
+bay = box(BW, BT, BH, z=BH / 2)
+arch_cut(bay, AW, AC, BT + 0.4)
+for sx in (-1, 1):
+    box(0.6, BT + 0.12, 0.3, x=sx * (BW / 2 - 0.3), z=0.15)                  # plinth
+    box(0.66, BT + 0.1, 0.12, x=sx * (AW / 2 + 0.3), z=spring)              # impost
+box(0.32, BT + 0.1, 0.36, z=AC + 0.03)                                      # keystone
+box(BW, BT + 0.14, 0.14, z=BH - 0.07)                                       # band
+ring = cyl(AW / 2 + 0.06, 0.03, f=BT / 2 + 0.02, z=spring, verts=24, axis='F', name='neon')
+cut(ring, cyl(AW / 2 + 0.02, 0.2, f=BT / 2 + 0.02, z=spring, verts=24, axis='F'))
+cut(ring, box(AW + 0.4, 0.3, spring, f=BT / 2 + 0.02, z=spring / 2))
+for sx in (-1, 1):
+    neon(N, N, spring, x=sx * (AW / 2 + 0.04), f=BT / 2 + 0.02, z=spring / 2)
+export('archbay')
+
+# ----------------------------------------------------------- balustrade ----
+# 1 m of balustrade, 1.1 m tall: solid lower half (cover reads honestly),
+# turned balusters above, a rail with neon on both top edges. Centred.
+reset()
+box(1.0, 0.34, 0.12, z=0.06)
+box(1.0, 0.26, 0.43, z=0.335)
+for bx in (-0.25, 0.25):
+    cyl(0.055, 0.43, x=bx, z=0.765, verts=8)
+    box(0.13, 0.13, 0.06, x=bx, z=0.58)
+box(1.0, 0.32, 0.12, z=1.04)
+for sf in (-1, 1):
+    neon(1.0, N, N, f=sf * 0.16, z=1.1)
+export('balustrade')
+
+# ----------------------------------------------------------------- pier ----
+# Square pier, 3 m: base, shaft, capital (gallery and bridge supports).
+reset()
+box(0.74, 0.74, 0.2, z=0.1)
+box(0.56, 0.56, 2.6, z=1.5)
+box(0.74, 0.74, 0.2, z=2.9)
+export('pier')
+
+# --------------------------------------------------------- half flight ----
+# Nine steps rising 1.6 m over 2.8 m, 1 m wide (stretched to the flight's
+# width in the game), climbing +Z, origin at the middle of the run. Neon
+# along both stringers.
+reset()
+RUN, RISE, NS = 2.8, 1.6, 9
+for i in range(NS):
+    hgt = RISE * (i + 1) / NS
+    box(1.0, RUN / NS, hgt, f=-RUN / 2 + RUN / NS * (i + 0.5), z=hgt / 2)
+ang = math.atan2(RISE, RUN)
+for sx in (-1, 1):
+    st = neon(N, math.hypot(RUN, RISE), N, x=sx * 0.5, z=RISE / 2 + 0.04)
+    st.rotation_euler = (ang, 0, 0)
+    bpy.context.view_layer.objects.active = st
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+export('steps16')
+
+# ------------------------------------------------------------ tower roof ----
+# Four posts on the watch tower's parapet corners holding a pyramid roof:
+# 6 x 6 m, posts 1.8 m, eave frame with neon, roof peak 1.5 m above it.
+reset()
+TR = 3.0
+for sx in (-1, 1):
+    for sf in (-1, 1):
+        box(0.4, 0.4, 1.8, x=sx * (TR - 0.25), f=sf * (TR - 0.25), z=0.9)
+for sf in (-1, 1):
+    box(2 * TR + 0.4, 0.3, 0.25, f=sf * (TR - 0.05), z=1.92)
+    box(0.3, 2 * TR + 0.4, 0.25, x=sf * (TR - 0.05), z=1.92)
+bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=(TR + 0.4) * math.sqrt(2), radius2=0.0, depth=1.5, location=(0, 0, 2.05 + 0.75), rotation=(0, 0, math.pi / 4))
+bpy.context.object.name = 'part'
+box(0.12, 0.12, 0.5, z=3.75)                                                 # finial
+for sf in (-1, 1):
+    neon(2 * TR + 0.84, N, N, f=sf * (TR + 0.42), z=2.06)
+    neon(N, 2 * TR + 0.84, N, x=sf * (TR + 0.42), z=2.06)
+export('towerroof')
+
+# ---------------------------------------------------------------- bench ----
+reset()
+for sx in (-1, 1):
+    box(0.32, 0.46, 0.4, x=sx * 0.75, z=0.2)
+box(2.1, 0.52, 0.1, z=0.45)
+neon(2.1, N, N, f=0.26, z=0.5)
+export('bench')
+print('kit++ done ->', out)
