@@ -8,6 +8,7 @@
 import { Loadout } from '../weapons/loadout.js';
 import { MAPS, MAP_IDS } from '../arena/layout.js';
 import { PARTY_MODES, TIME_LIMITS } from '../party/rules.js';
+import { BOT_LEVELS } from '../party/bots.js';
 import { el } from './util.js';
 
 const CSS = `
@@ -171,6 +172,14 @@ export class PartyUI {
       el('span', `n${s.settings.mode === 'tdm' ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === 0 ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
       if (s.settings.mode === 'tdm') el('span', `t${p.team}`, row, p.team === 0 ? 'CYAN' : 'ORANGE');
       el('span', p.ready ? 'ok' : '', row, p.ready ? 'READY' : '…');
+    }
+    if (s.players.some((p) => p.bot)) {
+      const bl = set('BOTS');
+      for (const [id, l] of Object.entries(BOT_LEVELS)) {
+        const b = this._btn(bl, l.label, `bots-${id}`, () => this.on.settings({ ...s.settings, botLevel: id }));
+        b.classList.toggle('on', (s.settings.botLevel ?? 'normal') === id);
+        b.disabled = locked;
+      }
     }
     if (s.host) {
       const br = el('div', 'row', this.root);

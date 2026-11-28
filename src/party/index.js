@@ -24,7 +24,7 @@ import { validateHit } from '../match/validate.js';
 import { ClockSync } from '../match/interp.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn } from './rules.js';
-import { Bot, buildGrid } from './bots.js';
+import { Bot, buildNav, BOT_LEVELS } from './bots.js';
 import { packState, unpackState } from './wire.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
@@ -59,7 +59,7 @@ export class PartySystem {
     this.me = -1;
     this.code = null;
     this.link = null; // host: hub, guest: link to the host
-    this.settings = { mode: 'ffa', map: 'town', scoreLimit: PARTY_MODES.ffa.def, timeLimit: 300, aimAssist: 'low' };
+    this.settings = { mode: 'ffa', map: 'town', scoreLimit: PARTY_MODES.ffa.def, timeLimit: 300, aimAssist: 'low', botLevel: 'normal' };
     /** @type {Map<number, {id:number, team:number, ready:boolean, primary:string, peer?:string}>} */
     this.players = new Map();
     this.rules = null; // host only
@@ -273,6 +273,7 @@ export class PartySystem {
       scoreLimit: PARTY_MODES[mode].limits.includes(s.scoreLimit) ? s.scoreLimit : PARTY_MODES[mode].def,
       timeLimit: s.timeLimit === 600 ? 600 : 300,
       aimAssist: s.aimAssist ?? 'low',
+      botLevel: BOT_LEVELS[s.botLevel] ? s.botLevel : 'normal',
     };
     for (const p of this.players.values()) p.ready = !!p.bot;
     this._broadcastRoster();
@@ -412,12 +413,15 @@ export class PartySystem {
   _startBots(spawns) {
     this._bots = new Map();
     const layout = MAPS[this.settings.map].layout;
-    this._grid = buildGrid(layout);
+    // the walk graph is built once per map (a few hundred ms on a tablet)
+    this._navs ??= new Map();
+    if (!this._navs.has(this.settings.map)) this._navs.set(this.settings.map, buildNav(layout));
+    this._grid = this._navs.get(this.settings.map);
     const weapons = this.ctx.peek('weapons');
     for (const p of this.players.values()) {
       if (!p.bot) continue;
       const def = weapons?.states?.get(p.primary)?.def;
-      const b = new Bot({ id: p.id, grid: this._grid, weapon: { id: p.primary, damage: def?.damage ?? 30, cycleTime: def?.cycleTime ?? 0.1, pellets: def?.pellets ?? 1 } });
+      const b = new Bot({ id: p.id, grid: this._grid, weapon: { id: p.primary, damage: def?.damage ?? 30, cycleTime: def?.cycleTime ?? 0.1, pellets: def?.pellets ?? 1 }, level: this.settings.botLevel });
       const s = spawns[p.id];
       if (s) b.place(s.x, s.z, s.yaw);
       this._bots.set(p.id, b);
@@ -435,7 +439,7 @@ export class PartySystem {
         return q ? { x: q.x, y: q.y, z: q.z } : null;
       }
       const b = this._bots.get(id);
-      if (b) return { x: b.x, y: 0, z: b.z };
+      if (b) return { x: b.x, y: b.y, z: b.z };
       const s = this._latest.get(id);
       return s ? { x: s.x, y: s.y, z: s.z } : null;
     };
@@ -471,7 +475,7 @@ export class PartySystem {
   _botStates(raw) {
     const out = [];
     for (const [id, b] of this._bots ?? []) {
-      out.push({ id, t: raw, x: b.x, y: 0, z: b.z, yaw: b.yaw, pitch: b.pitch, air: false, crouch: false, w: b.weapon.id, rl: false, alive: this.alive[id] !== false });
+      out.push({ id, t: raw, x: b.x, y: b.y, z: b.z, yaw: b.yaw, pitch: b.pitch, air: false, crouch: false, w: b.weapon.id, rl: false, alive: this.alive[id] !== false });
     }
     return out;
   }

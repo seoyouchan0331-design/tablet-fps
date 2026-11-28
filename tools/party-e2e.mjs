@@ -167,6 +167,8 @@ await waitP(B, () => [...window.__ENGINE__.ctx.peek('party').players.values()].f
 await click(A, 'remove-bot');
 await waitP(B, () => [...window.__ENGINE__.ctx.peek('party').players.values()].filter((p) => p.bot).length === 1, 15000).catch(() => fail('bot not removed'));
 await click(A, 'map-town');
+await click(A, 'bots-hard');
+await waitP(B, () => window.__ENGINE__.ctx.peek('party').settings.botLevel === 'hard', 15000).catch(() => fail('bot level did not reach the guest'));
 await D.close();
 for (const p of [A, B]) await click(p, 'ready');
 await Promise.all([A, B].map((p) => waitP(p, () => window.__ENGINE__.ctx.peek('party').live === true, 60000).catch(() => fail('bot match never went live'))));
