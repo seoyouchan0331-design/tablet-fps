@@ -317,8 +317,8 @@ export class WeaponSystem {
   }
 
   /** Pick the match loadout; the primary is drawn immediately. */
-  setLoadout(primary = 'rifle') {
-    this.loadout = new Loadout(primary);
+  setLoadout(primary = 'rifle', secondary = this.secondaryPick ?? 'pistol') {
+    this.loadout = new Loadout(primary, secondary);
     this.setWeaponImmediate(this.loadout.primary);
     return this.loadout;
   }

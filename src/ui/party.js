@@ -64,6 +64,7 @@ export class PartyUI {
     this.board.hidden = true;
     this.board.dataset.act = 'scoreboard';
     this.primary = 'rifle';
+    this.secondary = 'pistol';
   }
 
   _clear() {
@@ -165,6 +166,15 @@ export class PartyUI {
       b.classList.toggle('on', this.primary === id);
       b.disabled = !!me?.ready || s.settings.mode === 'gun'; // gun game hands out the guns
     }
+    // the secondary: one button on the primary's line that cycles (phones have no room for another line)
+    const secs = Loadout.SECONDARIES.filter((id) => id !== this.primary);
+    const sec = secs.includes(this.secondary) ? this.secondary : 'pistol';
+    const sb = this._btn(lo, `2ND: ${sec.toUpperCase()} ▸`, 'secondary', () => {
+      this.secondary = secs[(secs.indexOf(sec) + 1) % secs.length];
+      this.on.secondary?.(this.secondary);
+      this.showLobby(s);
+    });
+    sb.disabled = !!me?.ready || s.settings.mode === 'gun';
     const list = el('div', 'ow-plist', this.root);
     list.dataset.act = 'players';
     for (const p of s.players) {

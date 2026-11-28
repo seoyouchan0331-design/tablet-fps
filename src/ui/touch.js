@@ -53,6 +53,7 @@ const BUTTONS = [
   ['crouch', 'CROUCH', 'TouchCrouch', 'calc(7% + 22px)', 'calc(26% - 66px)'],
   ['swap', 'SWAP', 'TouchSwap', 'calc(7% + 190px)', 'calc(26% + 10px)'],
   ['dash', 'DASH', 'TouchDash', 'calc(7% + 108px)', 'calc(26% + 118px)'],
+  ['nade', 'NADE', 'TouchNade', 'calc(7% + 190px)', 'calc(26% + 84px)'],
 ];
 
 export class TouchControls {
@@ -82,6 +83,7 @@ export class TouchControls {
       b.dataset.code = code;
       b.dataset.id = id;
       if (code === 'TouchDash') this.dashBtn = b;
+      if (code === 'TouchNade') this.nadeBtn = b;
       setStyle(b, 'right', right);
       setStyle(b, 'bottom', bottom);
       this.buttons.set(id, b);
@@ -283,6 +285,12 @@ export class TouchControls {
       setStyle(this.dashBtn, 'background', left > 0
         ? `conic-gradient(rgba(61,242,255,.45) ${deg}deg, rgba(10,14,18,.28) ${deg}deg)`
         : 'rgba(61,242,255,.30)');
+    }
+    const nades = this.ctx.peek('grenades');
+    if (nades && this.nadeBtn) {
+      const label = `NADE ${nades.count}`;
+      if (this.nadeBtn.textContent !== label) this.nadeBtn.textContent = label;
+      this.nadeBtn.classList.toggle('empty', nades.count <= 0);
     }
 
     this._frames++;

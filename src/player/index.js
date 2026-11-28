@@ -486,6 +486,8 @@ export class PlayerSystem {
 
   _onExplosion(e) {
     if (!e?.position) return;
+    // a networked grenade: the host decides the damage; here only the shake
+    const visual = !!e.visualOnly;
     const eye = this.ctx.camera.position;
     const r = e.radius ?? 5;
     const d = this._tmp.copy(e.position).distanceTo(eye);
@@ -495,7 +497,7 @@ export class PlayerSystem {
     const falloff = Math.pow(clamp01(1 - d / r), 1.6);
     this.rig.addTrauma(clamp01(falloff * 1.4));
     this.health.addSuppression(HEALTH.suppression.perExplosion * falloff);
-    if (clear && falloff > 0.02) {
+    if (clear && falloff > 0.02 && !visual) {
       this.applyDamage((e.damage ?? 90) * falloff, e.position, { type: 'explosion' });
     }
   }

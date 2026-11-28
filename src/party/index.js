@@ -26,6 +26,7 @@ import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn, isTeamMode, gunFor, HILL } from './rules.js';
 import { Bot, buildNav, BOT_LEVELS } from './bots.js';
 import { packState, unpackState } from './wire.js';
+import { grenadeDamage } from '../weapons/grenades.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
 import { PartyUI, playerName, names, cleanName } from '../ui/party.js';
@@ -82,6 +83,7 @@ export class PartySystem {
       settings: (s) => this._changeSettings(s),
       team: (t) => this._send({ type: 'p.team', team: t }, true),
       bot: (n) => (n > 0 ? this._addBot() : this._removeBot()),
+      secondary: (id) => { const w = this.ctx.peek('weapons'); if (w) w.secondaryPick = id; },
       name: (n) => {
         saveName(n);
         this._send({ type: 'p.name', name: n }, true);
@@ -91,6 +93,9 @@ export class PartySystem {
     });
     this._offHit = ctx.events.prepend('damage:dealt', (e) => this._onLocalHit(e));
     this._offFire = ctx.events.on('weapon:fire', (e) => this._onLocalFire(e));
+    this._nades = new Map(); // grenade id -> thrower id (host)
+    this._offNade = ctx.events.on('grenade:throw', (e) => this._onLocalNade(e));
+    this._offBoom = ctx.events.on('grenade:explode', (e) => this._onBoom(e));
     this._onPageHide = () => this.link?.close();
     globalThis.addEventListener?.('pagehide', this._onPageHide);
   }
@@ -365,6 +370,14 @@ export class PartySystem {
       case 'p.hit':
         if (this.phase === 'match' && m.shooter === id) this._hostHit(m);
         break;
+      case 'p.nade':
+        if (this.phase === 'match' && this.live && this.alive[id] !== false && typeof m.gid === 'string') {
+          this._nades.set(m.gid, id);
+          const out = { type: 'p.nade', id, gid: m.gid, o: m.o, v: m.v };
+          this.link.broadcast(out, p?.peer);
+          this.ctx.peek('grenades')?.spawn({ gid: m.gid, owner: id, origin: m.o, vel: m.v });
+        }
+        break;
     }
   }
 
@@ -618,6 +631,9 @@ export class PartySystem {
       case 'p.hp':
         this._applyHp(m);
         break;
+      case 'p.nade':
+        if (this.phase === 'match' && typeof m.gid === 'string') this.ctx.peek('grenades')?.spawn({ gid: m.gid, owner: m.id, origin: m.o, vel: m.v });
+        break;
     }
   }
 
@@ -662,8 +678,11 @@ export class PartySystem {
     ctx.peek('world')?.load?.(this.settings.map);
     this._cands = spawnCandidates(MAPS[this.settings.map].layout, insideXZ);
     const me = this.players.get(this.me);
-    ctx.peek('weapons')?.setLoadout(this.settings.mode === 'gun' ? gunFor(0) : (me?.primary ?? 'rifle'));
+    if (this.settings.mode === 'gun') ctx.peek('weapons')?.setLoadout(gunFor(0), 'pistol');
+    else ctx.peek('weapons')?.setLoadout(me?.primary ?? 'rifle');
     this._showHill(this.settings.mode === 'koth');
+    ctx.peek('grenades')?.clear();
+    ctx.peek('grenades')?.refill();
     this._holder = undefined;
     this._paintHill(null);
     ctx.peek('weapons')?.refillAll?.();
@@ -724,6 +743,11 @@ export class PartySystem {
   _teardownMatch() {
     this.live = false;
     this._bots = null;
+    const nades = this.ctx.peek('grenades');
+    if (nades) {
+      nades.clear();
+      nades.enabled = true;
+    }
     this._showHill(false);
     this.ctx.peek('opponent')?.clearParty();
     this.ctx.peek('world')?.load?.('grid');
@@ -759,7 +783,7 @@ export class PartySystem {
         const k = this._scores[ev.killer]?.[0] ?? 0;
         const gun = gunFor(k);
         if (ev.killer === this.me && gun !== gunFor(k - 1)) {
-          ctx.peek('weapons')?.setLoadout(gun);
+          ctx.peek('weapons')?.setLoadout(gun, 'pistol');
           ui?.banner?.show(gun.toUpperCase(), 'New gun');
         }
         const bot = this._bots?.get(ev.killer);
@@ -780,6 +804,7 @@ export class PartySystem {
         if (s) player?.respawnAt(s.x, s.z, s.yaw);
         if (player?.health) player.health.regenEnabled = false;
         ctx.peek('weapons')?.refillAll?.();
+        ctx.peek('grenades')?.refill();
         player?.setControlEnabled?.(true);
       }
     } else if (ev.type === 'zone') {
@@ -887,6 +912,47 @@ export class PartySystem {
     return this.ctx.peek('weapons')?.activeId ?? 'rifle';
   }
 
+  /** I threw a grenade: tell the host (the host tells everyone). */
+  _onLocalNade(e) {
+    if (this.phase !== 'match' || !this.live) return;
+    if (this.host) {
+      this._nades.set(e.gid, this.me);
+      this.link?.broadcast({ type: 'p.nade', id: this.me, gid: e.gid, o: e.origin, v: e.vel });
+    } else this._send({ type: 'p.nade', gid: e.gid, o: e.origin, v: e.vel });
+  }
+
+  /** Host: a grenade went off (on the host's own simulation): damage everyone in reach. */
+  _onBoom(e) {
+    if (!this.host || this.phase !== 'match' || !this.rules) return;
+    const owner = e.owner === 'me' ? this.me : this._nades.get(e.gid) ?? e.owner;
+    this._nades.delete(e.gid);
+    if (!Number.isInteger(owner) || !this.players.has(owner)) return;
+    const physics = this.ctx.peek('physics');
+    const b = e.position;
+    for (const p of this.players.values()) {
+      if (p.id === owner || this.alive[p.id] === false || !this.rules.canHit(owner, p.id)) continue;
+      const q = this._where(p.id);
+      if (!q) continue;
+      const chest = { x: q.x, y: q.y + 1.0, z: q.z };
+      const dmg = grenadeDamage(Math.hypot(chest.x - b.x, chest.y - b.y, chest.z - b.z));
+      if (dmg < 1) continue;
+      if (!physics.lineOfSight(this._v1.set(b.x, b.y + 0.2, b.z), this._v2.set(chest.x, chest.y, chest.z))) continue;
+      this._hostDamage(owner, p.id, dmg, 'body', [b.x, b.y, b.z], 'grenade');
+    }
+  }
+
+  /** Host: where a player stands (me, a bot, or a guest's newest state). */
+  _where(id) {
+    if (id === this.me) {
+      const q = this.ctx.peek('player')?.position;
+      return q ? { x: q.x, y: q.y, z: q.z } : null;
+    }
+    const b = this._bots?.get(id);
+    if (b) return { x: b.x, y: b.y, z: b.z };
+    const s = this._latest.get(id);
+    return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
   /** Physics says MY bullet hit a party player: claim it, never apply it here. */
   _onLocalHit(e) {
     const id = e?.target?.remoteId;
@@ -983,6 +1049,8 @@ export class PartySystem {
       }
     }
     if (this.phase !== 'match') return;
+    const nades = ctx.peek('grenades');
+    if (nades) nades.enabled = this.live && this.alive[this.me] !== false;
     const raw = ctx.time.raw;
     const rawDt = Math.min(0.1, raw - (this._lastRaw ?? raw));
     this._lastRaw = raw;
@@ -1034,6 +1102,8 @@ export class PartySystem {
     globalThis.removeEventListener?.('pagehide', this._onPageHide);
     this._offHit?.();
     this._offFire?.();
+    this._offNade?.();
+    this._offBoom?.();
     this.link?.close();
     this.ui.dispose();
   }

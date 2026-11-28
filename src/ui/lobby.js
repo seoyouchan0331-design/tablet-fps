@@ -71,6 +71,7 @@ export class Lobby {
     this.toastEl = el('div', 'ow-toast', host);
     this.toastEl.hidden = true;
     this.primary = 'rifle';
+    this.secondary = 'pistol';
     this.open = false;
     this.hide();
   }
@@ -192,6 +193,15 @@ export class Lobby {
       b.classList.toggle('on', this.primary === id);
       b.disabled = s.myReady;
     }
+    // the secondary: one button on the primary's line that cycles (phones have no room for another line)
+    const secs = Loadout.SECONDARIES.filter((id) => id !== this.primary);
+    const sec = secs.includes(this.secondary) ? this.secondary : 'pistol';
+    const sb = this._btn(lo, `2ND: ${sec.toUpperCase()} ▸`, 'secondary', () => {
+      this.secondary = secs[(secs.indexOf(sec) + 1) % secs.length];
+      this.on.secondary?.(this.secondary);
+      this.showLobby(s);
+    });
+    sb.disabled = s.myReady;
     const st = el('div', 'sub', this.root, s.oppReady ? 'Opponent is ready.' : 'Waiting for opponent to be ready…');
     st.dataset.act = 'opp-ready';
     const row = el('div', 'row actions', this.root);

@@ -10,13 +10,13 @@ export const STORAGE_KEY = 'tfps.settings.v1';
 export const BINDABLE = [
   'forward', 'back', 'left', 'right',
   'jump', 'crouch', 'sprint', 'dash',
-  'fire', 'ads', 'reload', 'swapWeapon',
+  'fire', 'ads', 'reload', 'swapWeapon', 'grenade',
 ];
 
 export const ACTION_LABELS = {
   forward: 'Move forward', back: 'Move back', left: 'Move left', right: 'Move right',
   jump: 'Jump', crouch: 'Crouch / slide', sprint: 'Sprint', dash: 'Dash',
-  fire: 'Fire', ads: 'Aim (hold)', reload: 'Reload', swapWeapon: 'Swap weapon',
+  fire: 'Fire', ads: 'Aim (hold)', reload: 'Reload', swapWeapon: 'Swap weapon', grenade: 'Throw grenade',
 };
 
 export const DEFAULT_BINDINGS = Object.freeze({
@@ -32,6 +32,7 @@ export const DEFAULT_BINDINGS = Object.freeze({
   ads: ['KeyE'],
   reload: ['KeyR'],
   swapWeapon: ['Tab'],
+  grenade: ['KeyG'],
 });
 
 /** Keys that can't be bound (they open the menu or belong to the browser). */

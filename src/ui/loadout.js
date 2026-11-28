@@ -20,6 +20,10 @@ const CSS = `
 .ow-loadout .start { min-width: 200px; min-height: 52px; border-radius: 26px; border: 0; background: #3df2ff; color: #031015;
   font: 700 18px "Inter","Helvetica Neue",Arial,sans-serif; letter-spacing: .06em; }
 .ow-loadout .sub { font-size: 14px; color: #a9bcc4; }
+.ow-loadout .sec { min-height: 44px; min-width: 110px; padding: 0 18px; border-radius: 22px; border: 2px solid rgba(61,242,255,.35);
+  background: rgba(20,28,34,.8); color: #e8f4f8; font: 700 15px "Inter","Helvetica Neue",Arial,sans-serif; letter-spacing: .05em; }
+.ow-loadout .sec.on { border-color: #3df2ff; background: rgba(61,242,255,.22); }
+.ow-loadout .sec:disabled { opacity: .35; }
 @media (max-height: 560px) {
   .ow-loadout { gap: 10px; padding: 10px max(3vw,12px); }
   .ow-loadout h2 { font-size: 22px; }
@@ -47,7 +51,7 @@ export class LoadoutPicker {
 
     this.root = el('div', 'ow-loadout', host);
     el('h2', null, this.root, 'Choose your loadout');
-    el('div', 'sub', this.root, 'Primary + pistol · SWAP switches in the match');
+    el('div', 'sub', this.root, 'Primary + secondary · SWAP switches in the match · G / NADE throws a grenade');
     const row = el('div', 'row', this.root);
     this.cards = new Map();
     for (const [id, name, desc] of CARDS) {
@@ -58,6 +62,17 @@ export class LoadoutPicker {
       c.addEventListener('click', () => this.select(id));
       this.cards.set(id, c);
     }
+    el('div', 'sub', this.root, 'SECONDARY');
+    const srow = el('div', 'row', this.root);
+    this.secs = new Map();
+    for (const id of ['pistol', 'smg', 'shotgun']) {
+      const b = el('button', 'sec', srow, id.toUpperCase());
+      b.type = 'button';
+      b.dataset.act = `practice-secondary-${id}`;
+      b.addEventListener('click', () => this.selectSecondary(id));
+      this.secs.set(id, b);
+    }
+    this.secondary = ctx.peek('weapons')?.secondaryPick ?? 'pistol';
     this.startBtn = el('button', 'start', this.root, 'START');
     this.startBtn.type = 'button';
     this.startBtn.addEventListener('click', () => this.close());
@@ -70,6 +85,16 @@ export class LoadoutPicker {
   select(id) {
     this.choice = id;
     for (const [k, c] of this.cards) c.classList.toggle('on', k === id);
+    if (this.secondary === id) this.secondary = 'pistol'; // never the primary twice
+    this.selectSecondary(this.secondary);
+  }
+
+  selectSecondary(id) {
+    this.secondary = id === this.choice ? 'pistol' : id;
+    for (const [k, b] of this.secs ?? []) {
+      b.classList.toggle('on', k === this.secondary);
+      b.disabled = k === this.choice;
+    }
   }
 
   show() {
@@ -83,6 +108,8 @@ export class LoadoutPicker {
     if (!this.open) return;
     this.open = false;
     this.root.hidden = true;
+    const w = this.ctx.peek('weapons');
+    if (w) w.secondaryPick = this.secondary;
     this.ctx.events.emit('loadout:set', { primary: this.choice });
     this.ctx.peek('player')?.setControlEnabled?.(true);
   }

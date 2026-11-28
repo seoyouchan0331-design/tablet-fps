@@ -31,6 +31,7 @@ import { killcamAngles } from './killcam.js';
 import { Loadout } from '../weapons/loadout.js';
 import { MAPS } from '../arena/layout.js';
 import { smoothRtt } from '../net/ice.js';
+import { grenadeDamage } from '../weapons/grenades.js';
 
 const STATE_HZ = 30;
 /** Both sides ping every second; silence this long means the other device is gone. */
@@ -84,6 +85,7 @@ export class MatchSystem {
       practice: () => this.startPractice(),
       create: () => this.createRoom(),
       party: () => this.ctx.peek('party')?.create(),
+      secondary: (id) => { const w = this.ctx.peek('weapons'); if (w) w.secondaryPick = id; },
       join: (code) => this.joinRoom(code),
       ready: (primary) => this.setReady(primary),
       settings: (s) => this.changeSettings(s),
@@ -93,6 +95,14 @@ export class MatchSystem {
 
     this._offHit = ctx.events.prepend('damage:dealt', (e) => this._onLocalHit(e));
     this._offFire = ctx.events.on('weapon:fire', (e) => this._onLocalFire(e));
+    // grenades: both sides fly every grenade; the host applies the blast
+    this._nadeOwner = new Map(); // grenade id -> 'host' | 'guest'
+    this._offNade = ctx.events.on('grenade:throw', (e) => {
+      if (this.phase !== 'match' || !this.live) return;
+      this._nadeOwner.set(e.gid, this.role);
+      this._send(MSG.NADE, { gid: e.gid, o: e.origin, v: e.vel });
+    });
+    this._offBoom = ctx.events.on('grenade:explode', (e) => this._onBoom(e));
     // Closing the tab / app: tell the other side right away (best effort).
     this._onPageHide = () => this.transport?.close();
     globalThis.addEventListener?.('pagehide', this._onPageHide);
@@ -304,6 +314,12 @@ export class MatchSystem {
       player?.respawn(spawns[this.role]);
       if (player?.health) player.health.regenEnabled = false;
       ctx.peek('weapons')?.refillAll();
+      const nades = ctx.peek('grenades');
+      if (nades) {
+        nades.clear();
+        nades.refill();
+        nades.enabled = false; // until the round is live
+      }
       player?.setControlEnabled?.(false);
       ui?.banner?.show(`Round ${ev.round}`, `${ev.score[this.role]} – ${ev.score[this.other]}`);
       this._roundEndsAt = null;
@@ -311,6 +327,7 @@ export class MatchSystem {
     } else if (ev.type === 'live') {
       this.roundPick.hide();
       this.live = true;
+      if (ctx.peek('grenades')) ctx.peek('grenades').enabled = true;
       player?.setControlEnabled?.(true);
       this._roundEndsAt = ctx.time.raw + (ev.time ?? 30);
       ui?.banner?.show('Fight!', '');
@@ -347,6 +364,11 @@ export class MatchSystem {
     this.live = false;
     this.mode = null;
     this.ctx.peek('opponent')?.setVisible(false);
+    const nades = this.ctx.peek('grenades');
+    if (nades) {
+      nades.clear();
+      nades.enabled = true;
+    }
     const touch = this.ctx.peek('ui')?.touch;
     if (touch) touch.ping = null;
     const player = this.ctx.peek('player');
@@ -445,6 +467,31 @@ export class MatchSystem {
     if (r.killed) {
       this.alive[c.target] = false;
       this._broadcastRound(this.mode.kill(c.target));
+    }
+  }
+
+  /** Host: a grenade went off: the other player takes the blast if in reach and in sight. */
+  _onBoom(e) {
+    const owner = this._nadeOwner.get(e.gid);
+    this._nadeOwner.delete(e.gid);
+    if (this.role !== 'host' || !owner || !this.mode || !this.live || this.mode.state !== 'live') return;
+    const victim = owner === 'host' ? 'guest' : 'host';
+    if (!this.alive[victim] || !this.alive[owner]) return;
+    const q = victim === this.role ? this.ctx.peek('player')?.position : this.ctx.peek('opponent')?.avatar?.position;
+    if (!q) return;
+    const b = e.position;
+    const chest = { x: q.x, y: q.y + 1.0, z: q.z };
+    const dmg = grenadeDamage(Math.hypot(chest.x - b.x, chest.y - b.y, chest.z - b.z));
+    if (dmg < 1) return;
+    if (!this.ctx.peek('physics').lineOfSight(this._v1.set(b.x, b.y + 0.2, b.z), this._v2.set(chest.x, chest.y, chest.z))) return;
+    const r = applyDamage(this.hp[victim], dmg, 'body');
+    this.hp[victim] = r.hp;
+    const body = { victim, amount: r.amount, headshot: false, killed: r.killed, hp: { ...this.hp }, from: [b.x, b.y, b.z], weapon: 'grenade' };
+    this._send(MSG.HP, body);
+    this._applyHp(body);
+    if (r.killed) {
+      this.alive[victim] = false;
+      this._broadcastRound(this.mode.kill(victim));
     }
   }
 
@@ -566,6 +613,12 @@ export class MatchSystem {
           this._startMatch();
         }
         break;
+      case MSG.NADE:
+        if (this.phase === 'match' && this.live && typeof m.gid === 'string') {
+          this._nadeOwner.set(m.gid, this.other);
+          this.ctx.peek('grenades')?.spawn({ gid: m.gid, owner: this.other, origin: m.o, vel: m.v });
+        }
+        break;
       case MSG.BYE:
         this.transport?.close();
         break;
@@ -634,6 +687,8 @@ export class MatchSystem {
     globalThis.removeEventListener?.('pagehide', this._onPageHide);
     this._offHit?.();
     this._offFire?.();
+    this._offNade?.();
+    this._offBoom?.();
     this.transport?.close();
     this.lobby.dispose();
     this.roundPick.dispose();

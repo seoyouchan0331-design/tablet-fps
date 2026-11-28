@@ -117,3 +117,11 @@ test('gun game: the weapon steps up every 2 kills; finishing the ladder wins', (
   assert.equal(ev.at(-1).type, 'end');
   assert.equal(ev.at(-1).winner, 0);
 });
+
+import { grenadeDamage, GRENADE } from '../src/weapons/grenades.js';
+test('grenade damage: full at the blast, none past its radius', () => {
+  assert.equal(grenadeDamage(0), GRENADE.maxDamage);
+  assert.ok(grenadeDamage(2) > grenadeDamage(4) && grenadeDamage(4) > 0);
+  assert.equal(grenadeDamage(GRENADE.radius), 0);
+  assert.equal(grenadeDamage(20), 0);
+});

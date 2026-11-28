@@ -16,6 +16,7 @@ import { PartySystem } from './party/index.js';
 import { PhysicsSystem } from './physics/index.js';
 import { PlayerSystem } from './player/index.js';
 import { WeaponSystem } from './weapons/index.js';
+import { GrenadeSystem } from './weapons/grenades.js';
 import { FxSystem } from './fx/index.js';
 import { UiSystem } from './ui/index.js';
 import { DuelAudioSystem } from './audio/duel.js';
@@ -73,6 +74,7 @@ engine
   .add(PhysicsSystem)
   .add(PlayerSystem)
   .add(WeaponSystem)
+  .add(GrenadeSystem)
   .add(FxSystem)
   .add(UiSystem)
   .add(DuelAudioSystem)

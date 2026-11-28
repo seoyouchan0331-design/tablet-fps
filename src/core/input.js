@@ -18,6 +18,7 @@ export const ACTIONS = {
   sprint: ['ShiftLeft', 'TouchSprint'],
   reload: ['KeyR', 'TouchReload'],
   dash: ['KeyQ', 'TouchDash'],
+  grenade: ['KeyG', 'TouchNade'],
   fire: ['KeyF'],
   ads: ['KeyE'],
   swapWeapon: ['Tab', 'TouchSwap'],
@@ -27,7 +28,7 @@ export const ACTIONS = {
 /** Virtual codes the touch overlay presses; they stay bound whatever the keyboard map is. */
 const TOUCH_CODES = {
   sprint: ['TouchSprint'], dash: ['TouchDash'], jump: ['TouchJump'], crouch: ['TouchCrouch'],
-  reload: ['TouchReload'], swapWeapon: ['TouchSwap'],
+  reload: ['TouchReload'], swapWeapon: ['TouchSwap'], grenade: ['TouchNade'],
 };
 
 /** Apply keyboard bindings (src/core/settings.js) to the live action map. */

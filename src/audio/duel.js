@@ -65,6 +65,7 @@ export class DuelAudioSystem {
     this._files = { shots: {}, steps: [], ui: {} };
     this._offs = [
       ctx.events.on('weapon:fire', (e) => this._onFire(e)),
+      ctx.events.on('explosion', (e) => this._onBlast(e)),
       ctx.events.on('player:footstep', (e) => this._step(e?.stance === 'crouch' ? 'crouch' : e?.running ? 'run' : 'walk', null, 1)),
       ctx.events.on('player:land', (e) => {
         const v = Math.abs(typeof e?.velocity === 'number' ? e.velocity : 4);
@@ -219,6 +220,14 @@ export class DuelAudioSystem {
     const level = file ? SHOT_LEVEL[id] ?? 0.8 : 0.8;
     if (e.remote) this._voice(buf, e.origin, level * 1.15, rate);
     else this._voice(buf, null, level, rate);
+  }
+
+  /** A grenade: the shotgun and sniper recordings an octave down, layered, at the blast. */
+  _onBlast(e) {
+    if (!this.running || !e?.position) return;
+    const sg = this._files.shots.shotgun, sn = this._files.shots.sniper;
+    if (sg) this._voice(sg, e.position, 1.25, 0.45);
+    if (sn) this._voice(sn, e.position, 0.9, 0.5);
   }
 
   /** Pick the kill-sound pack (settings); unknown ids fall back to neon. */

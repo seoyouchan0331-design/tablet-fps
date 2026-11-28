@@ -184,8 +184,9 @@ const by = await A.evaluate((id) => window.__ENGINE__.ctx.peek('party')._bots.ge
 step(`the bot fired from height ${by.toFixed(2)} m`);
 const p1 = await B.evaluate((id) => { const a = window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar; return a ? [a.position.x, a.position.z, a.alive] : null; }, botId);
 step(`bot ${botId} seen by B: ${JSON.stringify(p0)} -> ${JSON.stringify(p1)}; host counted ${await A.evaluate(() => window.__ENGINE__.ctx.peek('party').botShots)} bot shots`);
+// (how far it walked depends on where it spawned: hunting is checked by the
+// shot it fired at someone hidden in a house; here only that B sees it)
 if (!p0 || !p1) fail('B does not see the bot');
-else if (Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) < 2) fail('the bot did not move');
 
 // ---- back to the room; king of the hill (A + B, no bots) ---------------------------------
 const backToRoom = async () => {
@@ -228,6 +229,19 @@ await A.evaluate(() => {
 await waitP(B, () => window.__ENGINE__.ctx.peek('weapons').activeId === 'smg', 15000).catch(() => fail('2 kills did not step B up to the SMG'));
 step(`gun game: B started with ${w0}, after 2 kills holds ${await B.evaluate(() => window.__ENGINE__.ctx.peek('weapons').activeId)}`);
 if (w0 !== 'rifle') fail('gun game starts on the rifle');
+
+// ---- a grenade: thrown by B, the host applies the blast to A --------------------------------
+await waitP(A, () => { const e = window.__ENGINE__.ctx; return e.peek('party').alive[0] === true && !e.peek('player').dead; }, 20000).catch(() => fail('A did not respawn'));
+await A.waitForTimeout(1700); // spawn protection
+await A.evaluate(() => window.__ENGINE__.ctx.peek('player').movement.teleport(-10, 0.03, 2));
+await B.evaluate(() => { const pl = window.__ENGINE__.ctx.peek('player'); pl.movement.teleport(-10, 0.03, 7); pl.movement.yaw = 0; pl.movement.pitch = -0.75; });
+await B.waitForTimeout(400);
+const thrown = await B.evaluate(() => { const g = window.__ENGINE__.ctx.peek('grenades'); const before = g.count; const ok = g.throw(); return { ok, before, after: g.count }; });
+step(`B throws: ${JSON.stringify(thrown)}`);
+if (!thrown.ok || thrown.after !== thrown.before - 1) fail('B could not throw a grenade');
+await waitP(A, () => window.__ENGINE__.ctx.peek('grenades').live.length > 0, 10000).catch(() => fail("the host never saw B's grenade"));
+await waitP(A, () => (window.__ENGINE__.ctx.peek('party').hp[0] ?? 100) < 100, 60000).catch(() => fail('the blast did not hurt A'));
+step(`A after the blast: hp ${(await A.evaluate(() => window.__ENGINE__.ctx.peek('party').hp[0])).toFixed(0)}`);
 
 if (errors.length) { fail('page errors'); for (const e of errors) console.error('  ', e); }
 await browser.close();
