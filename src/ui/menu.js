@@ -94,6 +94,14 @@ export class PauseMenu {
     this.resumeBtn = el('button', 'ow-btn primary', btns, 'Resume');
     this.resumeBtn.type = 'button';
     this.resumeBtn.addEventListener('click', () => this.close());
+    // trapped somewhere? the nearest spot on the main walkable area
+    const unstuck = el('button', 'ow-btn', btns, 'Stuck? Move me');
+    unstuck.type = 'button';
+    unstuck.dataset.act = 'unstuck';
+    unstuck.addEventListener('click', () => {
+      this.ctx.peek('unstuck')?.rescue();
+      this.close();
+    });
     const reset = el('button', 'ow-btn', btns, 'Defaults');
     reset.type = 'button';
     reset.addEventListener('click', () => {

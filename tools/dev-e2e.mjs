@@ -39,6 +39,20 @@ console.log('state', JSON.stringify(st));
 if (!st.hb || !st.frozen) fail('hitboxes / dummy freeze not active');
 await p.screenshot({ path: 'shots/dev-panel.png' });
 
+// ---- never trapped: inside a box, or out of the map, the player is moved back ----
+for (const [what, place] of [
+  ['inside a box', () => { const e = window.__ENGINE__.ctx; const b = e.peek('world').layout.boxes.find((x) => !x.wall && !x.floor && !x.deco && !x.hidden && !x.ramp && !x.ry && x.w > 1.5 && x.d > 1.5 && x.h > 2 && x.y - x.h / 2 < 0.05); const mv = e.peek('player').movement; mv.teleport(b.x, b.y - b.h / 2 + 0.1, b.z); const P = mv.position; return [b.x, b.z, b.w, b.h, mv.character.checkCapsule(P.x, P.y + 0.02, P.z) ? 'clear?!' : 'inside']; }],
+  ['under the map', () => { const mv = window.__ENGINE__.ctx.peek('player').movement; mv.teleport(3, -20, 3); return [3, 3, mv.position.y < -1 ? 'below' : 'not below?!']; }],
+]) {
+  const from = await p.evaluate(place);
+  if (String(from.at(-1)).includes('?!')) fail(`the test did not put the player ${what}`);
+  const ok = await p.waitForFunction(() => { const e = window.__ENGINE__.ctx; const mv = e.peek('player').movement; const P = mv.position; return P.y > -1 && mv.character.checkCapsule(P.x, P.y + 0.02, P.z); }, null, { timeout: 20000, polling: 200 })
+    .then(() => true).catch(() => false);
+  const at = await p.evaluate(() => { const P = window.__ENGINE__.ctx.peek('player').movement.position; return [P.x.toFixed(1), P.y.toFixed(1), P.z.toFixed(1)]; });
+  console.log(`${what} at ${from}: ${ok ? 'freed' : 'STILL STUCK'} -> ${at}`);
+  if (!ok) fail(`player left ${what}`);
+}
+
 // ---- a grenade at the dummy hurts it (practice) --------------------------------
 await click('map-grid');
 await p.waitForTimeout(300);

@@ -309,7 +309,20 @@ function ornament({ x, z, w, d, fh, slab, doors, windows }) {
     const y0 = (o.floor ?? 0) * fh;
     out.push(prop('doorframe', f.px, f.pz, f.ry, y0, { deco: true }));
     if (o.awning) out.push(prop('awning', f.px, f.pz, f.ry, y0 + 3.05, { deco: true }));
+    // a wall lantern beside a street door, on whichever side has no window
+    if ((o.floor ?? 0) === 0) {
+      const clash = (at) => windows.some((w) => w.side === o.side && (w.floor ?? 1) === 0 && Math.abs(w.at - at) < 1.6) ||
+        doors.some((d) => d !== o && d.side === o.side && Math.abs(d.at - at) < 1.4);
+      const half = o.side === '+z' || o.side === '-z' ? hw : hd;
+      const at = [1.45, -1.45].map((d) => o.at + d).find((a) => !clash(a) && Math.abs(a) < half - 0.6);
+      if (at != null) {
+        const l = face[o.side](at);
+        out.push(prop('lantern', l.px, l.pz, l.ry, y0 + 2.55, { deco: true }));
+      }
+    }
   }
+  // a chimney on the roof, back from one corner
+  out.push(prop('chimney', x + hw - 1.3, z - hd + 1.2, 0, roofY + slab, { deco: true }));
   return out;
 }
 

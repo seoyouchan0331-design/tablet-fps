@@ -497,3 +497,43 @@ box(2.1, 0.52, 0.1, z=0.45)
 neon(2.1, N, N, f=0.26, z=0.5)
 export('bench')
 print('kit++ done ->', out)
+
+# ------------------------------------------------------------ blind arch ----
+# Relief on a retaining wall: an arched frame 3 m wide, 2.6 m tall, 0.12 m
+# proud of the wall (the wall shows through the arch). Wall-mounted: back
+# on z = 0, sticking out toward +Z. No neon (the art keeps them plain).
+reset()
+fr = box(3.0, 0.12, 2.6, f=0.06, z=1.3)
+arch_cut(fr, 2.2, 2.2, 0.4, f=0.06)
+for sx in (-1, 1):
+    box(0.5, 0.16, 0.12, x=sx * 1.2, f=0.08, z=1.1)       # impost
+    box(0.45, 0.16, 0.25, x=sx * 1.25, f=0.08, z=0.125)   # plinth
+box(0.3, 0.18, 0.32, f=0.09, z=2.25)                       # keystone
+box(3.1, 0.16, 0.1, f=0.08, z=2.55)                        # band
+export('blindarch')
+
+# --------------------------------------------------------------- chimney ----
+# On a flat roof: a stack with a band, a cap and two flue pots.
+reset()
+box(0.8, 0.6, 1.0, z=0.5)
+box(0.88, 0.68, 0.08, z=0.7)
+box(0.96, 0.76, 0.1, z=1.05)
+for sx in (-1, 1):
+    cyl(0.09, 0.28, x=sx * 0.18, z=1.24, verts=8)
+export('chimney')
+
+# --------------------------------------------------------------- lantern ----
+# Wall lamp: a plate on the wall, an arm, a lantern hanging from it with a
+# glowing glass (neon). Wall-mounted: back on z = 0, out toward +Z.
+reset()
+box(0.14, 0.04, 0.3, f=0.02, z=0.0)
+arm = box(0.04, 0.4, 0.04, f=0.2, z=0.1)
+box(0.04, 0.04, 0.12, f=0.38, z=0.05)
+box(0.24, 0.24, 0.05, f=0.38, z=-0.02)                     # top hood
+box(0.18, 0.18, 0.04, f=0.38, z=-0.33)                     # base
+for sx in (-1, 1):
+    for sf in (-1, 1):
+        box(0.025, 0.025, 0.28, x=sx * 0.085, f=0.38 + sf * 0.085, z=-0.18)
+glass = box(0.14, 0.14, 0.24, f=0.38, z=-0.18, name='neon')
+export('lantern')
+print('kit+++ done ->', out)

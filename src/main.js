@@ -15,6 +15,7 @@ import { MatchSystem } from './match/index.js';
 import { PartySystem } from './party/index.js';
 import { StatsSystem } from './stats/index.js';
 import { ChatSystem } from './ui/chat.js';
+import { UnstuckSystem } from './player/unstuck.js';
 import { PhysicsSystem } from './physics/index.js';
 import { PlayerSystem } from './player/index.js';
 import { WeaponSystem } from './weapons/index.js';
@@ -82,6 +83,7 @@ engine
   .add(DuelAudioSystem)
   .add(StatsSystem)
   .add(ChatSystem)
+  .add(UnstuckSystem)
   .add(MatchSystem)
   .add(PartySystem);
 if (!lite) engine.add(SkySystem);

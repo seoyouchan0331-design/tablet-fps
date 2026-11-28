@@ -50,8 +50,8 @@ const HALF = [
     [9.0, GATE - 0.4], [17.2, FOOT - 1.5], [FOOT + 1.5, IN],
   ].flatMap(([a, b]) => parapet({ x0: CW + 0.2, z0: a, x1: CW + 0.2, z1: b, y0: 0, h: 1.0, posts: 5 })),
 
-  // pilaster strips on the canal wall near the ends (drawn only)
-  ...[-28, -25.5, 25.5, 28].map((z) => ({ x: CW - 0.05, y: -DEEP / 2, z, w: 0.1, h: DEEP, d: 0.5, deco: true, noEdge: true })),
+  // blind arches on the canal wall where no stair runs (drawn only)
+  ...[-27.5, -24.2, -3.5, 3.5, 24.2, 27.5].map((z) => prop('blindarch', CW, z, -Math.PI / 2, -DEEP, { deco: true })),
 
   // houses facing the canal across the quay street (doors on the street and the back)
   ...building({
