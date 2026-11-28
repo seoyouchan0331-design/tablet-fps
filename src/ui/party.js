@@ -272,7 +272,9 @@ export class PartyUI {
   /** One kill-feed line, gone after a few seconds. */
   feedKill({ killer, victim, weapon, headshot, me }) {
     const line = el('div', killer === me || victim === me ? 'me' : '', this.feed);
-    line.textContent = `${playerName(killer)}  ▸  ${playerName(victim)}  ·  ${String(weapon ?? '').toUpperCase()}`;
+    line.textContent = killer === victim
+      ? `${playerName(victim)}  ${weapon === 'fall' ? 'fell off the edge' : 'died'}`
+      : `${playerName(killer)}  ▸  ${playerName(victim)}  ·  ${String(weapon ?? '').toUpperCase()}`;
     if (headshot) el('span', 'hs', line, '  ✦');
     while (this.feed.children.length > 5) this.feed.firstChild.remove();
     setTimeout(() => line.remove(), 6000);

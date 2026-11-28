@@ -28,6 +28,7 @@ import { Bot, buildNav, BOT_LEVELS, spawnPoints } from './bots.js';
 import { packState, unpackState } from './wire.js';
 import { grenadeDamage } from '../weapons/grenades.js';
 import { PACK } from '../world/healthpacks.js';
+import { BEAM } from '../weapons/orbital.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
 import { PartyUI, playerName, names, levels, cleanName } from '../ui/party.js';
@@ -602,6 +603,12 @@ export class PartySystem {
       case 'p.hit':
         if (this.phase === 'match' && m.shooter === id) this._hostHit(m);
         break;
+      case 'p.lz':
+        if (this.phase === 'match') this._powerFire(id);
+        break;
+      case 'p.lp':
+        if (this.phase === 'match') this._powerAim(id, m.b);
+        break;
       case 'p.nade':
         if (this.phase === 'match' && this.live && this.alive[id] !== false && typeof m.gid === 'string') {
           this._nades.set(m.gid, id);
@@ -895,6 +902,9 @@ export class PartySystem {
       case 'p.heal':
         this._applyHeal(m);
         break;
+      case 'p.pw':
+        this._applyPower(m);
+        break;
     }
   }
 
@@ -937,6 +947,8 @@ export class PartySystem {
     this.settings = m.settings ?? this.settings;
     if (!this.host) this.players = new Map(m.players.map((p) => [p.id, { ...p }]));
     this.phase = 'match';
+    this._pw = null;
+    this.ctx.peek('orbital')?.setState({}, this.me);
     this.ui.hide();
     this.ui.clearFeed();
     ctx.events.emit('match:start', {});
@@ -1010,6 +1022,8 @@ export class PartySystem {
 
   _teardownMatch() {
     this.live = false;
+    this._pw = null;
+    this.ctx.peek('orbital')?.setState({}, this.me);
     this._bots = null;
     const nades = this.ctx.peek('grenades');
     if (nades) {
@@ -1060,7 +1074,8 @@ export class PartySystem {
       if (ev.victim === this.me) {
         player?.setControlEnabled?.(false);
         this._deadUntil = performance.now() / 1000 + 3;
-        ui?.banner?.show(`Killed by ${playerName(ev.killer)}`, String(ev.weapon ?? '').toUpperCase());
+        if (ev.killer === ev.victim) ui?.banner?.show(ev.weapon === 'fall' ? 'You fell' : 'You died', '');
+        else ui?.banner?.show(`Killed by ${playerName(ev.killer)}`, String(ev.weapon ?? '').toUpperCase());
       }
     } else if (ev.type === 'respawn') {
       this.alive[ev.id] = true;
@@ -1256,6 +1271,127 @@ export class PartySystem {
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }
 
+  /** Host: whoever drops past the map's floor of the void dies (nobody's kill). */
+  _hostFalls() {
+    const ky = MAPS[this.settings.map]?.layout.killY;
+    if (ky == null || this.phase !== 'match') return;
+    for (const p of this.players.values()) {
+      if (this.alive[p.id] === false) continue;
+      const q = this._where(p.id);
+      if (q && q.y < ky) this._hostDamage(p.id, p.id, 999, 'body', [q.x, q.y, q.z], 'fall');
+    }
+  }
+
+  // ------------------------------------------------- the orbital laser --
+  /** Host: the power weapon's life (weapons/orbital.js): spawn, pickup, drop, beam and its damage. */
+  _hostPower() {
+    const L = MAPS[this.settings.map]?.layout;
+    const spot = L?.power;
+    if (!spot || this.phase !== 'match' || !this.live) return;
+    const now = performance.now() / 1000;
+    const P = (this._pw ??= { at: null, holder: null, beam: null, until: 0, next: now + BEAM.first, drop: 0, warned: false, tick: 0, sent: 0 });
+    let say = null, changed = false;
+    if (!P.at && P.holder == null && !P.beam) {
+      if (!P.warned && now >= P.next - BEAM.warn) { P.warned = true; say = 'soon'; }
+      if (now >= P.next) { P.at = [spot.x, spot.y, spot.z]; P.drop = 0; say = 'ready'; changed = true; }
+    }
+    if (P.at) {
+      if (P.drop && now > P.drop) {
+        Object.assign(P, { at: null, drop: 0, next: now + BEAM.first, warned: false });
+        changed = true;
+      } else {
+        for (const p of this.players.values()) {
+          if (p.bot || this.alive[p.id] === false) continue;
+          const q = this._where(p.id);
+          if (!q || Math.hypot(q.x - P.at[0], q.z - P.at[2]) > 1.3 || Math.abs(q.y - P.at[1]) > 1.5) continue;
+          Object.assign(P, { holder: p.id, at: null, drop: 0 });
+          say = 'taken';
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (P.holder != null && this.alive[P.holder] === false) {
+      if (P.beam) Object.assign(P, { beam: null, next: now + BEAM.every, warned: false });
+      else {
+        // dropped where they fell (unless that was into the void)
+        const q = this._where(P.holder);
+        const ok = q && (L.killY == null || q.y > L.killY + 2);
+        Object.assign(P, ok ? { at: [q.x, q.y, q.z], drop: now + BEAM.drop } : { at: null, next: now + BEAM.first, warned: false });
+      }
+      P.holder = null;
+      changed = true;
+    }
+    if (P.beam) {
+      if (now >= P.until) {
+        Object.assign(P, { beam: null, holder: null, next: now + BEAM.every, warned: false });
+        changed = true;
+      } else {
+        if (now >= P.tick) {
+          P.tick = now + BEAM.tick;
+          const [bx, by, bz] = P.beam;
+          for (const p of this.players.values()) {
+            if (p.id === P.holder || this.alive[p.id] === false || !this.rules?.canHit(P.holder, p.id)) continue;
+            const q = this._where(p.id);
+            if (!q || Math.hypot(q.x - bx, q.z - bz) > BEAM.radius || q.y < by - 1.2 || q.y > by + 2.5) continue;
+            this._hostDamage(P.holder, p.id, BEAM.damage, 'body', [bx, by, bz], 'laser');
+          }
+        }
+        if (now - P.sent > 0.1) changed = true; // the foot moves: everyone draws it
+      }
+    }
+    if (changed || say) {
+      P.sent = now;
+      const m = { type: 'p.pw', at: P.at, holder: P.holder, beam: P.beam, say };
+      this.link?.broadcast(m);
+      this._applyPower(m);
+    }
+  }
+
+  /** Host: the holder pressed LASER. */
+  _powerFire(id) {
+    const P = this._pw;
+    if (!P || P.holder !== id || P.beam || this.alive[id] === false) return;
+    const q = this._where(id);
+    if (!q) return;
+    const now = performance.now() / 1000;
+    Object.assign(P, { beam: [q.x, q.y, q.z], until: now + BEAM.time, tick: now + 0.4, sent: 0 });
+  }
+
+  /** Host: the holder's beam foot moved (no faster than the beam can). */
+  _powerAim(id, b) {
+    const P = this._pw;
+    if (!P?.beam || P.holder !== id || !Array.isArray(b) || !b.every(Number.isFinite)) return;
+    const d = Math.hypot(b[0] - P.beam[0], b[2] - P.beam[2]);
+    const max = BEAM.speed * 0.5 + 1;
+    const k = d > max ? max / d : 1;
+    P.beam = [P.beam[0] + (b[0] - P.beam[0]) * k, b[1], P.beam[2] + (b[2] - P.beam[2]) * k];
+  }
+
+  /** Everyone: what the host says about the laser (drawn by the orbital system). */
+  _applyPower(m) {
+    const orb = this.ctx.peek('orbital');
+    const was = orb?.state.holder;
+    orb?.setState(m, this.me);
+    const banner = this.ctx.peek('ui')?.banner;
+    if (m.say === 'soon') banner?.show('Orbital laser', 'in 10 s · tower top');
+    else if (m.say === 'ready') banner?.show('Orbital laser', 'on the tower top');
+    else if (m.say === 'taken' && m.holder !== was) banner?.show(m.holder === this.me ? 'You have the orbital laser' : `${playerName(m.holder)} has the laser`, m.holder === this.me ? 'Press LASER' : '');
+  }
+
+  /** My LASER button. */
+  orbitalFire() {
+    this._send({ type: 'p.lz' }, true);
+  }
+
+  /** My beam's foot, ~10 times a second. */
+  orbitalAim(b) {
+    const now = performance.now() / 1000;
+    if (now - (this._aimSent ?? 0) < 0.1) return;
+    this._aimSent = now;
+    this._send({ type: 'p.lp', b: b.map((v) => Math.round(v * 100) / 100) }, true);
+  }
+
   /** Physics says MY bullet hit a party player: claim it, never apply it here. */
   _onLocalHit(e) {
     const id = e?.target?.remoteId;
@@ -1381,6 +1517,8 @@ export class PartySystem {
     if (this.host && this.rules) {
       this._hostEvents(this.rules.tick(wallDt, this.settings.mode === 'koth' ? { inZone: this._inZone() } : undefined));
       this._hostPickups();
+      this._hostFalls();
+      this._hostPower();
       this._stepBots(wallDt, raw);
     }
     const ui = ctx.peek('ui');

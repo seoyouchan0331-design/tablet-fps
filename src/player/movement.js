@@ -323,6 +323,8 @@ export class Movement {
     if (c.grounded && !jumped && v.y < 0) v.y = 0;
     v.y += GRAVITY * h;
     if (v.y < -MOVE.terminalSpeed) v.y = -MOVE.terminalSpeed;
+    // a lift carries the feet to `carryY` (world/gadgets.js sets it each frame)
+    if (this.carryY != null) v.y = Math.max(-6, Math.min(6, (this.carryY - this.position.y) / h));
 
     // ---- ledge detection (before the move, so we never fight the wall) ---
     if (this._tryLedge(h, wish, wishLen, cmd, forwardIntent)) {
@@ -637,6 +639,18 @@ export class Movement {
     }
     this._doJump();
     return true;
+  }
+
+  /** A jump pad: leave the ground with this velocity (air control steers it, as after a jump). */
+  launch(vx, vy, vz) {
+    this.velocity.set(vx, vy, vz);
+    this._jumpBuffer = 0;
+    this._coyote = 0;
+    this.grounded = false;
+    this.character.grounded = false;
+    this.jumped = true;
+    this.carryY = null;
+    this._setState('jump');
   }
 
   _doJump() {

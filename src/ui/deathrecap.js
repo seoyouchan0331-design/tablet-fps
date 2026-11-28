@@ -33,7 +33,7 @@ export function recapText({ weapon, headshot, distance, hits = [], oppHp }) {
   const dmg = Math.round(hits.reduce((s, h) => s + (h.amount || 0), 0));
   const heads = hits.filter((h) => h.headshot).length;
   return {
-    weapon: def ? `${def.label} · ${CLASS[weapon] ?? weapon.toUpperCase()}` : weapon === 'grenade' ? 'FRAG GRENADE' : 'UNKNOWN',
+    weapon: def ? `${def.label} · ${CLASS[weapon] ?? weapon.toUpperCase()}` : weapon === 'grenade' ? 'FRAG GRENADE' : weapon === 'fall' ? 'FELL INTO THE VOID' : weapon === 'laser' ? 'ORBITAL LASER' : 'UNKNOWN',
     headshot: !!headshot,
     distance: Number.isFinite(distance) ? `${Math.round(distance)} m` : '',
     taken: `You took ${hits.length} hit${hits.length === 1 ? '' : 's'} · ${dmg} dmg` + (heads ? ` (${heads} to the head)` : ''),

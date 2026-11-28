@@ -82,7 +82,8 @@ export class ArenaSystem {
     const clipGeos = [];
     const edgeGeos = [];
     const floorGeos = []; // usually one slab; a map with a sunken canal has several
-    for (const b of layout.boxes) {
+    // (layout.far: scenery outside the bounds, drawn only: clouds, distant islands)
+    for (const b of layout.far ? [...layout.boxes, ...layout.far] : layout.boxes) {
       if (b.floor) floorGeos.push(pieceGeometry(b, layout.floorColor ?? FLOOR));
       else if (b.hidden) clipGeos.push(pieceGeometry(b, GREY));
       else (b.deco ? decoGeos : boxGeos).push(pieceGeometry(b, layout.color ?? GREY));

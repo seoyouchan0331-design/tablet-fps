@@ -127,6 +127,42 @@ console.log('tdm colliders:', JSON.stringify(ff));
 if (!ff.some((x) => x.team === 'mate') || ff.some((x) => x.team === 'mate' && x.hittable)) fail('a teammate can be hit');
 if (ff.some((x) => x.team === 'enemy' && !x.hittable)) fail('an enemy cannot be hit');
 await p.evaluate(() => window.__ENGINE__.ctx.peek('party').leave());
+// SKYBASE: the orbital laser burns a bot; falling off the edge kills me
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').startSolo({ mode: 'ffa', map: 'skybase', bots: 1 }));
+await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party').live === true, null, { timeout: 120000, polling: 500 });
+const sky = await p.evaluate(async () => {
+  const e = window.__ENGINE__.ctx; const P = e.peek('party'); const O = e.peek('orbital'); const mv = e.peek('player').movement;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const out = {};
+  P._pw = null; P._hostPower(); P._pw.next = 0; // the laser now
+  mv.teleport(0, 6.45, 0);
+  const t0 = performance.now();
+  while (performance.now() - t0 < 8000 && O.state.holder !== P.me) await wait(100);
+  out.held = O.state.holder === P.me;
+  const botId = [...P.players.values()].find((x) => x.bot).id;
+  const bot = P._bots.get(botId);
+  const hp0 = P.hp[botId] ?? 100;
+  O._crosshairPoint = () => O._aim.set(bot.x, bot.y, bot.z); // aim the beam at the bot, wherever it walks
+  O.fire();
+  const t1 = performance.now();
+  while (performance.now() - t1 < 7000 && (P.hp[botId] ?? 100) >= hp0 && P.alive[botId] !== false) await wait(100);
+  out.beam = !!O.state.beam || P.alive[botId] === false;
+  out.botHp = [hp0, P.hp[botId], P.alive[botId]];
+  await wait(6500);
+  out.afterBeam = { holder: O.state.holder, beam: O.state.beam };
+  // over the edge: dead, by the fall
+  mv.teleport(31, 0.05, 3);
+  const t2 = performance.now();
+  while (performance.now() - t2 < 6000 && P.alive[P.me] !== false) await wait(100);
+  out.fell = P.alive[P.me] === false;
+  return out;
+});
+console.log('skybase laser + fall:', JSON.stringify(sky));
+if (!sky.held) fail('walking into the laser did not pick it up');
+if (!(sky.botHp[1] < sky.botHp[0] || sky.botHp[2] === false)) fail('the orbital laser did not burn the bot');
+if (sky.afterBeam.holder != null || sky.afterBeam.beam) fail('the beam did not end');
+if (!sky.fell) fail('falling into the void did not kill me in a match');
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').leave());
 await p.evaluate(() => window.__ENGINE__.ctx.peek('party').startSolo({ mode: 'ffa', map: 'town', bots: 3 }));
 await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party').live === true, null, { timeout: 120000, polling: 500 });
 await click('party-kill');

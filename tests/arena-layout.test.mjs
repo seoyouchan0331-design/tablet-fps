@@ -61,12 +61,12 @@ test('spawns are not inside a box', () => {
 // ---- every map --------------------------------------------------------------
 import { MAPS, MAP_IDS } from '../src/arena/layout.js';
 
-test('six maps, GRID first and identical to ARENA', () => {
-  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'town', 'canal', 'field']);
+test('seven maps, GRID first and identical to ARENA', () => {
+  assert.deepEqual(MAP_IDS, ['grid', 'lanes', 'blocks', 'town', 'canal', 'skybase', 'field']);
   assert.equal(MAPS.grid.layout, ARENA);
 });
 
-for (const id of ['grid', 'lanes', 'blocks', 'field', 'town', 'canal']) {
+for (const id of ['grid', 'lanes', 'blocks', 'field', 'town', 'canal', 'skybase']) {
   const L = MAPS[id].layout;
   test(`${id}: valid (symmetric, bounded, walls, spawns 24 m apart)`, () => {
     assert.deepEqual(validateLayout(L), []);
@@ -76,6 +76,7 @@ for (const id of ['grid', 'lanes', 'blocks', 'field', 'town', 'canal']) {
       for (let x = s.x - 5; x <= s.x + 5; x += 0.5) {
         for (const b of L.boxes) {
           if (b.floor || b.wall) continue;
+          if (b.y - b.h / 2 > (s.y ?? 0) + 2.2) continue; // overhead (a spawn inside a hangar)
           const inside = insideXZ(b, x, s.z, 0.4);
           assert.ok(!inside, `${id}: box at ${b.x},${b.z} blocks the spawn lane at x=${x}`);
         }

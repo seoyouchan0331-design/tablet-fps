@@ -518,6 +518,23 @@ export class MatchSystem {
     }
   }
 
+  /** Host: a player who drops past the map's floor of the void loses the round. */
+  _hostFalls() {
+    const ky = MAPS[this.settings.map]?.layout.killY;
+    if (ky == null || !this.live || this.mode?.state !== 'live') return;
+    for (const role of ['host', 'guest']) {
+      if (!this.alive[role]) continue;
+      const q = role === this.role ? this.ctx.peek('player')?.position : this.ctx.peek('opponent')?.avatar?.position;
+      if (!q || q.y >= ky) continue;
+      this.hp[role] = 0;
+      const body = { victim: role, amount: 100, headshot: false, killed: true, hp: { ...this.hp }, from: [q.x, q.y, q.z], weapon: 'fall' };
+      this._send(MSG.HP, body);
+      this._applyHp(body);
+      this.alive[role] = false;
+      this._broadcastRound(this.mode.kill(role));
+    }
+  }
+
   /** Host: a hurt player on a ready health pack gets +50 (both sides hear of it). */
   _hostPickups() {
     const pk = this.ctx.peek('pickups');
@@ -727,6 +744,7 @@ export class MatchSystem {
     if (this.role === 'host' && this.mode) {
       this._broadcastRound(this.mode.tick(rawDt, this.hp));
       this._hostPickups();
+      this._hostFalls();
     }
 
     const ui = ctx.peek('ui');

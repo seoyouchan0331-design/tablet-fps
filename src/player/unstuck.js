@@ -124,7 +124,16 @@ export class UnstuckSystem {
       return;
     }
     const P = mv.position;
-    const out = Math.abs(P.x) > L.size / 2 - 0.5 || Math.abs(P.z) > (L.depth ?? L.size) / 2 - 0.5 || P.y < -12;
+    // off the edge of a map over the void: in a match the host kills the
+    // faller (and respawns them); give it a few seconds before stepping in
+    const fell = L.killY != null && P.y < L.killY;
+    this._falling = fell ? (this._falling ?? 0) + step : 0;
+    const matchLive = ctx.peek('party')?.phase === 'match' || ctx.peek('match')?.live;
+    if (fell && matchLive && this._falling < 3) {
+      mv.velocity?.set?.(0, 0, 0); // hang there (out of sight below the deck) until the verdict
+      return;
+    }
+    const out = Math.abs(P.x) > L.size / 2 - 0.5 || Math.abs(P.z) > (L.depth ?? L.size) / 2 - 0.5 || P.y < (L.killY ?? -12);
     const c = mv.character;
     const inside = !c.checkCapsule(P.x, P.y + 0.02, P.z, c.height) || insideSolid(L, P.x, P.y + 0.5, P.z);
     this._inside = inside ? this._inside + step : 0;

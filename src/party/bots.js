@@ -74,8 +74,9 @@ export function buildNav(layout) {
       // every floor here is a level (a map may stack them: a tunnel under a street)
       const tops = [];
       for (const f of floors) if (insideXZ(f, x, z, 0)) tops.push(f.y + f.h / 2);
-      if (!tops.length) tops.push(0);
-      const ground = Math.min(...tops);
+      // no floor here: open ground at 0, or over the void (a sky map) nothing but what stands here
+      if (!tops.length && layout.killY == null) tops.push(0);
+      const ground = tops.length ? Math.min(...tops) : -Infinity;
       for (const b of near) {
         if (!insideXZ(b, x, z, 0)) continue;
         const h = b.ramp ? topAt(b, x, z) : b.y + b.h / 2;

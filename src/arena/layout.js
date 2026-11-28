@@ -11,6 +11,7 @@
  */
 import { mirrorPiece as mirror, windowWall, building, prop } from './shapes.js';
 import { arcade, bridge, tower, flight, parapet } from './town.js';
+import { SKYBASE } from './skybase.js';
 import { CANAL } from './canal.js';
 const SIZE = 30;
 const H = SIZE / 2;
@@ -281,6 +282,7 @@ export const MAPS = {
     },
   },
   canal: CANAL,
+  skybase: SKYBASE,
   field: {
     label: 'FIELD',
     note: 'Huge — long rounds, every range',
