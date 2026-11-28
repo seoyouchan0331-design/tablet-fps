@@ -61,7 +61,9 @@ export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2 }) {
   for (let k = 0; k < L; k++) out.push(prop('balustrade', x0 + k + 0.5, zf + 0.2, 0, fh, { deco: true }));
   out.push({ x, y: fh + COVER / 2, z: zf + 0.2, w: L, h: COVER, d: 0.34, hidden: true });
   // the open +x end above the walkway, beside the stair head
-  const zs = zb - 1.6; // the stair band runs zs..zb
+  // the stair band runs zs..zs+1.6, 0.35 off the back wall: the flight's side
+  // wall and its handrail glow stand clear of it (flush, they z-fought)
+  const zs = zb - 1.95;
   const endLen = zs - (zf + 0.4);
   out.push(prop('balustrade', x1 - 0.18, (zf + 0.4 + zs) / 2, Math.PI / 2, fh, { sx: endLen, deco: true }));
   out.push({ x: x1 - 0.18, y: fh + COVER / 2, z: (zf + 0.4 + zs) / 2, w: 0.34, h: COVER, d: endLen, hidden: true });
@@ -69,7 +71,7 @@ export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2 }) {
   // roof and cornice
   out.push({ x, y: top + 0.125, z: (zf - 0.3 + zb) / 2, w: L + 0.6, h: 0.25, d: zb - zf + 0.3 });
   out.push(prop('cornice', x, zf - 0.3, Math.PI, top + 0.25, { sx: L + 0.6, deco: true }));
-  out.push(...flight({ x: x1 + 5.6, z: zb - 0.8, dir: '-x', rise: fh }));
+  out.push(...flight({ x: x1 + 5.6, z: zs + 0.8, dir: '-x', rise: fh }));
   return out;
 }
 

@@ -216,7 +216,10 @@ bpy.context.view_layer.objects.active = cutter
 bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
 cutter.location.z -= 1.2
 cut(side, cutter)
-neon(N, RUN * 1.03, N, x=SW / 2 + 0.31, f=0, z=RISE / 2 + 0.85)  # handrail glow, will be sloped
+# handrail glow on top of the side wall (the cut leaves its top 2.67 m up at
+# mid-run: cutter centre 4.4, half-thickness 1.5 / cos(slope))
+top_mid = RISE + 0.9 + 1.5 - 1.2 - 1.5 / math.cos(math.atan2(RISE, RUN))
+neon(0.3, RUN * 0.95, N, x=SW / 2 + 0.15, f=0, z=top_mid + 0.02)
 n2 = bpy.data.objects['neon']
 n2.rotation_euler = (-math.atan2(RISE, RUN), 0, 0)
 bpy.context.view_layer.objects.active = n2
@@ -457,10 +460,12 @@ RUN, RISE, NS = 2.8, 1.6, 9
 for i in range(NS):
     hgt = RISE * (i + 1) / NS
     box(1.0, RUN / NS, hgt, f=-RUN / 2 + RUN / NS * (i + 0.5), z=hgt / 2)
+# along the step nosings: the line through each tread's front top corner
+# (Blender's -Y is the game's +Z, so the slope is negative about X)
 ang = math.atan2(RISE, RUN)
 for sx in (-1, 1):
-    st = neon(N, math.hypot(RUN, RISE), N, x=sx * 0.5, z=RISE / 2 + 0.04)
-    st.rotation_euler = (ang, 0, 0)
+    st = neon(N, math.hypot(RUN, RISE) - RUN / NS, N, x=sx * 0.5, f=RUN / NS / 2, z=RISE / 2 + RISE / NS / 2 + 0.02)
+    st.rotation_euler = (-ang, 0, 0)
     bpy.context.view_layer.objects.active = st
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
 export('steps16')
