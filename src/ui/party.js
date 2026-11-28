@@ -20,6 +20,7 @@ const CSS = `
 .ow-plist .p.me { outline: 2px solid rgba(61,242,255,.6); }
 .ow-plist .t0 { color: #3df2ff; } .ow-plist .t1 { color: #ff7a52; }
 .ow-plist .ok { color: #7fe39a; }
+.ow-plist .lv { font: 700 12px ui-monospace,monospace; color: #a9bcc4; padding: 2px 6px; border-radius: 6px; background: rgba(61,242,255,.12); }
 .ow-feed { position: fixed; right: max(14px, env(safe-area-inset-right)); top: 64px; z-index: 12; display: flex; flex-direction: column;
   align-items: flex-end; gap: 4px; pointer-events: none; font: 700 14px "Inter","Helvetica Neue",Arial,sans-serif; }
 .ow-feed div { padding: 4px 10px; border-radius: 8px; background: rgba(6,9,12,.66); color: #e8f4f8; }
@@ -39,6 +40,8 @@ const CSS = `
 
 /** Names players chose (id -> name); PartySystem keeps it in step with the roster. */
 export const names = new Map();
+/** Players' levels (id -> level), from the roster. */
+export const levels = new Map();
 export const playerName = (id) => names.get(id) || `P${id + 1}`;
 
 /** A name as typed -> a safe display name: no control characters, at most 12 characters. */
@@ -181,6 +184,7 @@ export class PartyUI {
       const row = el('div', `p${p.id === s.me ? ' me' : ''}`, list);
       el('span', `n${isTeamMode(s.settings.mode) ? ' t' + p.team : ''}`, row, `${playerName(p.id)}${p.id === (s.hostId ?? 0) ? ' · host' : ''}${p.bot ? ' · bot' : ''}${p.id === s.me ? ' (you)' : ''}`);
       if (isTeamMode(s.settings.mode)) el('span', `t${p.team}`, row, p.team === 0 ? 'CYAN' : 'ORANGE');
+      if (levels.get(p.id)) el('span', 'lv', row, `LV ${levels.get(p.id)}`);
       el('span', p.ready ? 'ok' : '', row, p.ready ? 'READY' : '…');
     }
     if (s.players.some((p) => p.bot)) {
@@ -236,7 +240,7 @@ export class PartyUI {
     for (const h of ['PLAYER', 'K', 'D']) el('td', null, head, h);
     for (const p of standings) {
       const tr = el('tr', `${p.id === me ? 'me ' : ''}${isTeamMode(mode) ? 't' + p.team : ''}`, t);
-      el('td', null, tr, playerName(p.id));
+      el('td', null, tr, `${playerName(p.id)}${levels.get(p.id) ? `  ·  LV ${levels.get(p.id)}` : ''}`);
       el('td', null, tr, String(p.kills));
       el('td', null, tr, String(p.deaths));
     }

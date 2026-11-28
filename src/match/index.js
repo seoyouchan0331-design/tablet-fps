@@ -85,6 +85,7 @@ export class MatchSystem {
       practice: () => this.startPractice(),
       create: () => this.createRoom(),
       party: () => this.ctx.peek('party')?.create(),
+      stats: () => this.ctx.peek('stats')?.summary(),
       secondary: (id) => { const w = this.ctx.peek('weapons'); if (w) w.secondaryPick = id; },
       join: (code) => this.joinRoom(code),
       ready: (primary) => this.setReady(primary),
@@ -106,6 +107,10 @@ export class MatchSystem {
     // Closing the tab / app: tell the other side right away (best effort).
     this._onPageHide = () => this.transport?.close();
     globalThis.addEventListener?.('pagehide', this._onPageHide);
+  }
+
+  _myLv() {
+    return this.ctx.peek('stats')?.level ?? 1;
   }
 
   get other() {
@@ -139,7 +144,7 @@ export class MatchSystem {
       return;
     }
     this._wire();
-    this._send(MSG.SETTINGS, this.settings);
+    this._send(MSG.SETTINGS, { ...this.settings, lv: this._myLv() });
     this._enterLobby();
   }
 
@@ -159,7 +164,7 @@ export class MatchSystem {
       return;
     }
     this._wire();
-    this._send(MSG.HELLO, {});
+    this._send(MSG.HELLO, { lv: this._myLv() });
     this._enterLobby();
   }
 
@@ -214,6 +219,7 @@ export class MatchSystem {
       settings: this.settings,
       myReady: this.ready[this.role],
       oppReady: this.ready[this.other],
+      oppLv: this.oppLv,
       net: { route: this.route, rtt: this.rtt },
     });
   }
@@ -343,6 +349,7 @@ export class MatchSystem {
       this.phase = 'results';
       this._winner = ev.winner;
       player?.setControlEnabled?.(false);
+      ctx.events.emit('match:result', { win: ev.winner === this.role, mode: 'duel' });
       this._renderResults();
     }
   }
@@ -561,9 +568,12 @@ export class MatchSystem {
         }
         break;
       case MSG.HELLO:
-        if (this.role === 'host') this._send(MSG.SETTINGS, this.settings);
+        if (Number.isInteger(m.lv)) this.oppLv = m.lv;
+        if (this.role === 'host') this._send(MSG.SETTINGS, { ...this.settings, lv: this._myLv() });
+        this._renderLobby();
         break;
       case MSG.SETTINGS:
+        if (Number.isInteger(m.lv)) this.oppLv = m.lv;
         if (this.role === 'guest') {
           this.settings = { aimAssist: m.aimAssist, winTarget: m.winTarget, map: MAPS[m.map] ? m.map : 'grid' };
           this._renderLobby();

@@ -111,6 +111,11 @@ const scores = await Promise.all([A, B, C].map((p) => party(p, () => JSON.string
 step(`scores ${scores.join(' | ')}`);
 if (new Set(scores).size !== 1 || JSON.parse(scores[0])[0]?.[0] !== 1 || JSON.parse(scores[0])[1]?.[1] !== 1) fail('kill not recorded the same on every side');
 await C.screenshot({ path: 'shots/party-feed.png' });
+const stA = await A.evaluate(() => window.__ENGINE__.ctx.peek('stats').data);
+const stB = await B.evaluate(() => window.__ENGINE__.ctx.peek('stats').data);
+step(`stats: A ${JSON.stringify(stA)} | B ${JSON.stringify(stB)}`);
+if (stA.kills < 1 || stA.xp < 100) fail("A's kill was not counted in its stats");
+if (stB.deaths < 1) fail("B's death was not counted in its stats");
 const feed = await C.evaluate(() => document.querySelector('.ow-feed')?.textContent ?? '');
 step(`C's kill feed: "${feed.trim()}"`);
 if (!/Alpha\s+▸\s+P2/.test(feed)) fail("the kill (by Alpha) is missing from C's feed");
@@ -136,6 +141,8 @@ step('C left; A and B carry on');
 // ---- D joins the running match ------------------------------------------------------
 const D = await open('D');
 await D.waitForFunction(() => window.__READY__ === true, null, { timeout: 900000, polling: 2000 });
+await waitAct(D, 'stats', 30000).catch(() => fail('no stats line on the main menu'));
+step(`menu stats: ${await D.evaluate(() => document.querySelector('[data-act="stats"]').textContent)}`);
 await waitAct(D, 'join'); await click(D, 'join');
 await waitAct(D, 'code');
 await D.fill('[data-act="code"]', code);

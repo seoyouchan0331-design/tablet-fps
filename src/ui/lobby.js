@@ -51,6 +51,9 @@ const CSS = `
   .ow-lobby .score { font-size: 40px; }
   .ow-lobby .actions { padding: 4px 10px; }
 }
+.ow-lobby .stats { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; align-items: baseline; max-width: 640px;
+  padding: 10px 16px; border-radius: 14px; background: rgba(20,28,34,.85); font: 600 14px "Inter","Helvetica Neue",Arial,sans-serif; color: #a9bcc4; }
+.ow-lobby .stats b { font: 800 20px ui-monospace,monospace; color: #3df2ff; }
 .ow-toast { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 31; padding: 10px 18px; border-radius: 10px;
   background: rgba(10,14,18,.85); color: #fff; font: 600 16px "Inter","Helvetica Neue",Arial,sans-serif; pointer-events: none; }
 .ow-toast[hidden] { display: none; }
@@ -106,6 +109,17 @@ export class Lobby {
     this._btn(row, 'JOIN', 'join', () => this.showJoin());
     this._btn(row, 'PRACTICE', 'practice', () => this.on.practice());
     el('div', 'err', this.root, error);
+    const st = this.on.stats?.();
+    if (st) {
+      const f = (n) => n.toLocaleString('en-US');
+      const line = el('div', 'stats', this.root);
+      line.dataset.act = 'stats';
+      el('b', null, line, `LV ${st.level}`);
+      el('span', null, line, `${f(st.toNext)} XP to LV ${st.level + 1}`);
+      el('span', null, line, `${f(st.kills)} kills · K/D ${st.kd.toFixed(2)}`);
+      el('span', null, line, `headshots ${Math.round(st.hs)}%`);
+      el('span', null, line, `wins ${Math.round(st.winRate)}% (${st.wins}/${st.matches})`);
+    }
   }
 
   showJoin(error = '') {
@@ -202,7 +216,8 @@ export class Lobby {
       this.showLobby(s);
     });
     sb.disabled = s.myReady;
-    const st = el('div', 'sub', this.root, s.oppReady ? 'Opponent is ready.' : 'Waiting for opponent to be ready…');
+    const lv = s.oppLv ? ` (LV ${s.oppLv})` : '';
+    const st = el('div', 'sub', this.root, s.oppReady ? `Opponent${lv} is ready.` : `Waiting for opponent${lv} to be ready…`);
     st.dataset.act = 'opp-ready';
     const row = el('div', 'row actions', this.root);
     const ready = this._btn(row, s.myReady ? 'READY ✓' : 'READY', 'ready', () => this.on.ready(this.primary), true);

@@ -29,7 +29,7 @@ import { packState, unpackState } from './wire.js';
 import { grenadeDamage } from '../weapons/grenades.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
-import { PartyUI, playerName, names, cleanName } from '../ui/party.js';
+import { PartyUI, playerName, names, levels, cleanName } from '../ui/party.js';
 
 const NAME_KEY = 'tfps.name';
 const loadName = () => { try { return cleanName(localStorage.getItem(NAME_KEY)); } catch { return ''; } };
@@ -87,7 +87,7 @@ export class PartySystem {
       secondary: (id) => { const w = this.ctx.peek('weapons'); if (w) w.secondaryPick = id; },
       name: (n) => {
         saveName(n);
-        this._send({ type: 'p.name', name: n }, true);
+        this._send({ type: 'p.name', name: n, lv: this._myLv() }, true);
       },
       again: () => this._backToRoom(),
       leave: () => this.leave(),
@@ -99,6 +99,10 @@ export class PartySystem {
     this._offBoom = ctx.events.on('grenade:explode', (e) => this._onBoom(e));
     this._onPageHide = () => this.link?.close();
     globalThis.addEventListener?.('pagehide', this._onPageHide);
+  }
+
+  _myLv() {
+    return this.ctx.peek('stats')?.level ?? 1;
   }
 
   get active() {
@@ -123,7 +127,7 @@ export class PartySystem {
     this.gen = 0;
     this.hostId = 0;
     this._wireHub(this.link);
-    this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName() });
+    this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName(), lv: this._myLv() });
     this.phase = 'lobby';
     this._broadcastRoster();
   }
@@ -419,7 +423,7 @@ export class PartySystem {
   }
 
   _roster() {
-    return [...this.players.values()].map(({ id, team, ready, primary, name, bot }) => ({ id, team, ready, primary, name: name ?? '', bot: !!bot }));
+    return [...this.players.values()].map(({ id, team, ready, primary, name, bot, lv }) => ({ id, team, ready, primary, name: name ?? '', bot: !!bot, lv: lv ?? 1 }));
   }
 
   _broadcastRoster(start = true) {
@@ -474,6 +478,7 @@ export class PartySystem {
       case 'p.name':
         if (p) {
           p.name = cleanName(m.name);
+          if (Number.isInteger(m.lv) && m.lv > 0 && m.lv < 1000) p.lv = m.lv;
           this._broadcastRoster(false);
         }
         break;
@@ -721,7 +726,7 @@ export class PartySystem {
     switch (m.type) {
       case 'p.welcome':
         if (Number.isInteger(m.you)) this.me = m.you;
-        if (loadName()) this.link?.send({ type: 'p.name', name: loadName() });
+        this.link?.send({ type: 'p.name', name: loadName(), lv: this._myLv() });
         break;
       case 'p.full':
         this.link?.close();
@@ -779,7 +784,11 @@ export class PartySystem {
       if (m.settings) this.settings = m.settings;
     }
     names.clear();
-    for (const p of this.players.values()) if (p.name) names.set(p.id, p.name);
+    levels.clear();
+    for (const p of this.players.values()) {
+      if (p.name) names.set(p.id, p.name);
+      if (p.lv && !p.bot) levels.set(p.id, p.lv);
+    }
     for (const p of this.players.values()) this.ctx.peek('opponent')?.get(p.id)?.target && (this.ctx.peek('opponent').get(p.id).target.name = playerName(p.id));
     // party players who left disappear from the scene; late joiners appear
     const opp = this.ctx.peek('opponent');
@@ -958,6 +967,8 @@ export class PartySystem {
       this.phase = 'results';
       player?.setControlEnabled?.(false);
       this._lastEnd = { standings: ev.standings ?? [], teams: ev.teams ?? [0, 0], mode: this.settings.mode, winner: ev.winner, me: this.me };
+      const mine = isTeamMode(this.settings.mode) ? this.players.get(this.me)?.team : this.me;
+      ctx.events.emit('match:result', { win: ev.winner != null && ev.winner === mine, mode: this.settings.mode });
       this.ui.showResults({ ...this._lastEnd, host: this.host });
     }
   }
