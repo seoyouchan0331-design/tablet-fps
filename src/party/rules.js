@@ -82,6 +82,12 @@ export class Deathmatch {
     return out;
   }
 
+  /** A player joined mid-match: they come in dead and respawn within a moment. */
+  add(id, team = 0) {
+    if (this.players.has(id) || this.state === 'idle' || this.state === 'end') return;
+    this.players.set(id, { id, team: this.mode === 'tdm' ? team : id, kills: 0, deaths: 0, alive: false, respawnAt: this.clock + 0.5, safeUntil: 0 });
+  }
+
   /** A player left: drop them; the match ends if fewer than 2 remain (or one team is empty). */
   remove(id) {
     if (!this.players.delete(id) || this.state === 'idle' || this.state === 'end') return [];

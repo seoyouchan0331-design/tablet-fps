@@ -11,6 +11,7 @@ import { PARTY_MODES, TIME_LIMITS } from '../party/rules.js';
 import { el } from './util.js';
 
 const CSS = `
+.ow-lobby input.name { width: 260px; height: 48px; font: 700 22px "Inter","Helvetica Neue",Arial,sans-serif; letter-spacing: .04em; text-transform: none; }
 .ow-plist { display: flex; flex-direction: column; gap: 6px; min-width: min(420px, 90vw); }
 .ow-plist .p { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 12px; background: rgba(20,28,34,.85);
   font: 600 16px "Inter","Helvetica Neue",Arial,sans-serif; }
@@ -35,13 +36,20 @@ const CSS = `
 .ow-board .sub { text-align: center; margin-top: 8px; color: #a9bcc4; }
 `;
 
-export const playerName = (id) => `P${id + 1}`;
+/** Names players chose (id -> name); PartySystem keeps it in step with the roster. */
+export const names = new Map();
+export const playerName = (id) => names.get(id) || `P${id + 1}`;
+
+/** A name as typed -> a safe display name: no control characters, at most 12 characters. */
+export function cleanName(s) {
+  return [...String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim()].slice(0, 12).join('');
+}
 
 export class PartyUI {
   /**
    * @param {HTMLElement} host
    * @param {{ready:(primary:string)=>void, settings:(s:object)=>void, team:(t:number)=>void,
-   *          again:()=>void, leave:()=>void}} on
+   *          name:(n:string)=>void, again:()=>void, leave:()=>void}} on
    */
   constructor(host, on) {
     this.on = on;
@@ -88,6 +96,8 @@ export class PartyUI {
    *          net?:string}} s
    */
   showLobby(s) {
+    // a roster update must not steal the name field from someone typing in it
+    const typing = document.activeElement === this.nameEl ? { v: this.nameEl.value, at: this.nameEl.selectionStart } : null;
     this._clear();
     el('div', 'label', this.root, `PARTY ROOM · ${s.host ? 'YOU ARE HOST' : 'CONNECTED'}`);
     const c = el('div', 'code', this.root, s.code);
@@ -95,6 +105,27 @@ export class PartyUI {
     el('div', 'sub', this.root, `${s.players.length}/8 players · friends join with this code${s.net ? ' · ' + s.net : ''}`).dataset.act = 'net-info';
     const me = s.players.find((p) => p.id === s.me);
     const locked = !s.host || !!me?.ready;
+    const ng = el('div', 'set', this.root);
+    el('div', 'label', ng, 'YOUR NAME');
+    const name = el('input', 'name', ng);
+    name.maxLength = 12;
+    name.placeholder = `P${s.me + 1}`;
+    name.value = typing ? typing.v : (me?.name ?? '');
+    name.autocomplete = 'off';
+    name.spellcheck = false;
+    name.dataset.act = 'name';
+    const commit = () => this.on.name(cleanName(name.value));
+    name.addEventListener('change', commit);
+    name.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // typing must not move the player
+      if (e.key === 'Enter') name.blur();
+    });
+    name.addEventListener('keyup', (e) => e.stopPropagation());
+    this.nameEl = name;
+    if (typing) {
+      name.focus();
+      name.setSelectionRange(typing.at, typing.at);
+    }
     const set = (label) => {
       const g = el('div', 'set', this.root);
       el('div', 'label', g, label);

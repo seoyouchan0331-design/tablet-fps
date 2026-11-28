@@ -52,6 +52,11 @@ const ids = await Promise.all([A, B, C].map((p) => party(p, () => window.__ENGIN
 step(`ids ${ids}`);
 if (ids.join() !== '0,1,2') fail(`ids ${ids}`);
 
+// names: A calls itself Alpha; everyone's list shows it
+await A.fill('[data-act="name"]', 'Alpha');
+await A.evaluate(() => document.querySelector('[data-act="name"]').dispatchEvent(new Event('change')));
+await waitP(B, () => document.querySelector('[data-act="players"]')?.textContent.includes('Alpha'), 15000).catch(() => fail("B's player list does not show A's name"));
+
 // host settings reach the guests
 await click(A, 'map-lanes');
 await waitP(C, () => window.__ENGINE__.ctx.peek('party').settings.map === 'lanes', 15000).catch(() => fail('guest did not get the map pick'));
@@ -108,7 +113,7 @@ if (new Set(scores).size !== 1 || JSON.parse(scores[0])[0]?.[0] !== 1 || JSON.pa
 await C.screenshot({ path: 'shots/party-feed.png' });
 const feed = await C.evaluate(() => document.querySelector('.ow-feed')?.textContent ?? '');
 step(`C's kill feed: "${feed.trim()}"`);
-if (!/P1\s+▸\s+P2/.test(feed)) fail("the kill is missing from C's feed");
+if (!/Alpha\s+▸\s+P2/.test(feed)) fail("the kill (by Alpha) is missing from C's feed");
 const board = await B.evaluate(() => window.__ENGINE__.ctx.peek('party').ui.lastBoard ?? '');
 step(`B's scoreboard while dead: "${board.slice(0, 60)}"`);
 if (!/Respawn in/.test(board)) fail('no scoreboard with a respawn countdown on the dead player');
@@ -128,12 +133,27 @@ await waitP(A, () => window.__ENGINE__.ctx.peek('party').players.size === 2 && !
 await waitP(B, () => !window.__ENGINE__.ctx.peek('opponent').get(2), 15000).catch(() => fail('B still draws C after C left'));
 step('C left; A and B carry on');
 
+// ---- D joins the running match ------------------------------------------------------
+const D = await open('D');
+await D.waitForFunction(() => window.__READY__ === true, null, { timeout: 900000, polling: 2000 });
+await waitAct(D, 'join'); await click(D, 'join');
+await waitAct(D, 'code');
+await D.fill('[data-act="code"]', code);
+await click(D, 'join-go');
+await waitP(D, () => { const e = window.__ENGINE__.ctx; const P = e.peek('party'); return P.phase === 'match' && P.alive[P.me] === true && !e.peek('player').dead; }, 60000)
+  .catch(() => fail('late joiner D never got into the match alive'));
+const dv = await D.evaluate(() => { const e = window.__ENGINE__.ctx; return { me: e.peek('party').me, map: e.peek('world').mapId, others: e.peek('opponent').party.size, score: JSON.stringify(e.peek('party')._scores[0]) }; });
+step(`D joined late: ${JSON.stringify(dv)}`);
+if (dv.map !== 'lanes' || dv.others !== 2) fail('D should be on LANES seeing A and B');
+if (dv.score !== '[1,0]') fail("D did not get the match's scores");
+await waitP(A, (id) => window.__ENGINE__.ctx.peek('opponent').get(id)?.avatar.alive === true, 20000, dv.me).catch(() => fail('A does not see D'));
+
 // ---- the end, back to the room -------------------------------------------------
 await A.evaluate(() => { window.__ENGINE__.ctx.peek('party').rules.timeLeft = 0.01; });
-await Promise.all([A, B].map((p) => waitAct(p, 'result', 15000).catch(() => fail('no results screen'))));
+await Promise.all([A, B, D].map((p) => waitAct(p, 'result', 15000).catch(() => fail('no results screen'))));
 const res = await B.evaluate(() => document.querySelector('[data-act="result"]').textContent);
 step(`B result: ${res}`);
-if (res !== 'P1 WINS') fail(`B should see P1 win, saw ${res}`);
+if (res !== 'Alpha WINS') fail(`B should see Alpha win, saw ${res}`);
 await click(A, 'again');
 await waitAct(B, 'ready', 15000).catch(() => fail('guest not back in the room'));
 const ph = await Promise.all([A, B].map((p) => party(p, () => window.__ENGINE__.ctx.peek('party').phase)));

@@ -26,7 +26,11 @@ import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
 import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn } from './rules.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
-import { PartyUI, playerName } from '../ui/party.js';
+import { PartyUI, playerName, names, cleanName } from '../ui/party.js';
+
+const NAME_KEY = 'tfps.name';
+const loadName = () => { try { return cleanName(localStorage.getItem(NAME_KEY)); } catch { return ''; } };
+const saveName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch { /* private mode */ } };
 
 const STATE_HZ = 20;
 const PING_S = 1;
@@ -75,6 +79,10 @@ export class PartySystem {
       ready: (primary) => this._send({ type: 'p.ready', primary }, true),
       settings: (s) => this._changeSettings(s),
       team: (t) => this._send({ type: 'p.team', team: t }, true),
+      name: (n) => {
+        saveName(n);
+        this._send({ type: 'p.name', name: n }, true);
+      },
       again: () => this._backToRoom(),
       leave: () => this.leave(),
     });
@@ -113,7 +121,7 @@ export class PartySystem {
       this._heard.set(id, performance.now() / 1000);
       this._hostMessage(id, m);
     });
-    this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle' });
+    this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName() });
     this.phase = 'lobby';
     this._broadcastRoster();
   }
@@ -183,7 +191,9 @@ export class PartySystem {
   }
 
   _hostJoin(peer) {
-    if (this.phase !== 'lobby') {
+    const late = this.phase === 'match' && this.rules && this.rules.state !== 'end';
+    if (this.phase !== 'lobby' && !late) {
+      // the results screen: come back in a moment
       this.link.send(peer, { type: 'p.busy' });
       setTimeout(() => this.link?.kick(peer), 200);
       return;
@@ -193,10 +203,21 @@ export class PartySystem {
     // balance teams: join the smaller one
     const n = [0, 0];
     for (const p of this.players.values()) n[p.team]++;
-    this.players.set(id, { id, team: n[1] < n[0] ? 1 : 0, ready: false, primary: 'rifle', peer });
+    const team = n[1] < n[0] ? 1 : 0;
+    this.players.set(id, { id, team, ready: late, primary: 'rifle', peer, name: '' });
     this._heard.set(id, performance.now() / 1000);
     this.link.send(peer, { type: 'p.welcome', you: id, code: this.code });
-    this._broadcastRoster();
+    if (late) {
+      // straight into the running match: it loads the map, the rules respawn it
+      this.rules.add(id, team);
+      this.alive[id] = false;
+      this.hp[id] = MAX_HP;
+      this.link.send(peer, {
+        type: 'p.start', settings: this.settings, players: this._roster(), spawns: {},
+        late: { scores: this.rules.scores(), teams: this.rules.teamScores(), timeLeft: this.rules.state === 'live' ? this.rules.timeLeft : null, alive: { ...this.alive } },
+      });
+    }
+    this._broadcastRoster(!late);
   }
 
   _hostLeave(peer) {
@@ -223,14 +244,14 @@ export class PartySystem {
   }
 
   _roster() {
-    return [...this.players.values()].map(({ id, team, ready, primary }) => ({ id, team, ready, primary }));
+    return [...this.players.values()].map(({ id, team, ready, primary, name }) => ({ id, team, ready, primary, name: name ?? '' }));
   }
 
-  _broadcastRoster() {
+  _broadcastRoster(start = true) {
     const m = { type: 'p.roster', players: this._roster(), settings: this.settings };
     this.link?.broadcast(m);
     this._applyRoster(m);
-    this._maybeStart();
+    if (start) this._maybeStart();
   }
 
   _maybeStart() {
@@ -272,6 +293,12 @@ export class PartySystem {
           p.ready = true;
           p.primary = typeof m.primary === 'string' ? m.primary : 'rifle';
           this._broadcastRoster();
+        }
+        break;
+      case 'p.name':
+        if (p) {
+          p.name = cleanName(m.name);
+          this._broadcastRoster(false);
         }
         break;
       case 'p.team':
@@ -388,6 +415,7 @@ export class PartySystem {
     switch (m.type) {
       case 'p.welcome':
         if (Number.isInteger(m.you)) this.me = m.you;
+        if (loadName()) this.link?.send({ type: 'p.name', name: loadName() });
         break;
       case 'p.busy':
         this.link?.close();
@@ -429,12 +457,25 @@ export class PartySystem {
   _applyRoster(m) {
     if (!Array.isArray(m.players)) return;
     if (!this.host) {
-      this.players = new Map(m.players.map((p) => [p.id, { ...p }]));
+      this.players = new Map(m.players.map((p) => [p.id, { ...p, name: cleanName(p.name) }]));
       if (m.settings) this.settings = m.settings;
     }
-    // party players who left disappear from the scene
+    names.clear();
+    for (const p of this.players.values()) if (p.name) names.set(p.id, p.name);
+    for (const p of this.players.values()) this.ctx.peek('opponent')?.get(p.id)?.target && (this.ctx.peek('opponent').get(p.id).target.name = playerName(p.id));
+    // party players who left disappear from the scene; late joiners appear
     const opp = this.ctx.peek('opponent');
     for (const id of [...(opp?.party.keys() ?? [])]) if (!this.players.has(id)) opp.remove(id);
+    if (this.phase === 'match' && opp) {
+      const myTeam = this.players.get(this.me)?.team;
+      const tdm = this.settings.mode === 'tdm';
+      for (const p of this.players.values()) {
+        if (p.id === this.me || opp.get(p.id)) continue;
+        opp.add(p.id, { name: playerName(p.id), enemy: !tdm || p.team !== myTeam });
+        this.alive[p.id] ??= false;
+        this.hp[p.id] ??= MAX_HP;
+      }
+    }
     if (this.phase === 'lobby') {
       const net = this.host ? '' : this.rtt != null ? `${Math.round(this.rtt)} ms` : '';
       this.ui.showLobby({ code: this.code, me: this.me, host: this.host, players: [...this.players.values()], settings: this.settings, net });
@@ -481,11 +522,25 @@ export class PartySystem {
     if (sp) player?.respawnAt(sp.x, sp.z, sp.yaw);
     player?.setControlEnabled?.(false);
     this.live = false;
+    if (m.late) {
+      // joined a running match: its scores and clock, and wait for our respawn
+      this._scores = m.late.scores ?? {};
+      this._teams = m.late.teams ?? [0, 0];
+      for (const [id, a] of Object.entries(m.late.alive ?? {})) this.alive[id] = a;
+      this.alive[this.me] = false;
+      if (m.late.timeLeft != null) {
+        this.live = true;
+        this._roundEndsAt = performance.now() / 1000 + m.late.timeLeft;
+      }
+      this._deadUntil = performance.now() / 1000 + 0.5;
+      ctx.peek('ui')?.banner?.show('Joined the match', '');
+    }
     const ui = ctx.peek('ui');
     if (ui?.state) {
       ui.state.mode = tdm ? 'TDM' : 'FFA';
       ui.state.scoreUs = ui.state.scoreThem = 0;
     }
+    if (m.late) this._hud();
   }
 
   _applyRoom() {

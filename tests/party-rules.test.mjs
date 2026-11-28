@@ -50,6 +50,18 @@ test('tdm: no friendly fire, team kills add up, time up ends it', () => {
   assert.equal(ev.at(-1).winner, 0);
 });
 
+test('a late joiner respawns within a moment and can play', () => {
+  const dm = new Deathmatch({ mode: 'ffa' });
+  dm.start([{ id: 0 }, { id: 1 }]);
+  live(dm);
+  dm.add(2);
+  assert.equal(dm.canHit(0, 2), false, 'not in yet');
+  assert.deepEqual(dm.tick(0.6), [{ type: 'respawn', id: 2 }]);
+  dm.tick(2);
+  assert.equal(dm.canHit(0, 2), true);
+  assert.deepEqual(dm.scores()[2], [0, 0]);
+});
+
 test('a match ends when players leave', () => {
   const dm = new Deathmatch({ mode: 'tdm' });
   dm.start([{ id: 0, team: 0 }, { id: 1, team: 1 }, { id: 2, team: 1 }]);
