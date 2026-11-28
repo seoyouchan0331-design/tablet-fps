@@ -10,7 +10,12 @@
  *             show hitboxes
  *   FEEDBACK  kill banner 1-5, every kill-sound pack, hit/headshot sounds,
  *             death recap, killcam toward the dummy, round-pick strip, scope
- *   STATS     fps, draw calls, triangles, map, position
+ *   PARTY     solo vs bots in any mode (offline), bot level live, +1 kill,
+ *             end the match
+ *   GRENADE   infinite grenades, throw one, throw at the dummy
+ *   PROFILE   the saved record: +1000 XP, reset
+ *   CHAT      fake lines (all / team) to see the chat log
+ *   STATS     fps, draw calls, triangles, map, position, party state
  */
 import * as THREE from 'three';
 import { MAPS, MAP_IDS } from '../arena/layout.js';
@@ -49,7 +54,7 @@ export class DevPanel {
       this.panel.hidden = !this.panel.hidden;
       if (!this.panel.hidden) this.render();
     });
-    this.flags = { god: false, ammo: false, freeze: false, hitboxes: false };
+    this.flags = { god: false, ammo: false, freeze: false, hitboxes: false, nades: false };
     this.speed = 1;
     this._tick = this._tick.bind(this);
     requestAnimationFrame(this._tick);
@@ -181,8 +186,67 @@ export class DevPanel {
       }, pack === id);
     }
 
+    const party = c.peek('party');
+    const pa = this._row('PARTY (OFFLINE, BOTS)');
+    for (const [mode, label] of [['ffa', 'SOLO FFA'], ['tdm', 'SOLO TDM'], ['koth', 'SOLO HILL'], ['gun', 'SOLO GUN']]) {
+      this._b(pa, label, () => party?.startSolo({ mode, map: world?.mapId === 'grid' ? 'town' : world?.mapId ?? 'town', bots: 3 }), false, `solo-${mode}`);
+    }
+    this._b(pa, '+1 KILL', () => {
+      const P = party;
+      const victim = [...(P?.players.values() ?? [])].find((p) => p.bot && P.alive[p.id] !== false);
+      if (P?.host && P.rules && victim) P._hostEvents(P.rules.kill(P.me, victim.id));
+    }, false, 'party-kill');
+    this._b(pa, 'END MATCH', () => { if (party?.rules) party.rules.timeLeft = 0.01; }, false, 'party-end');
+    this._b(pa, 'LEAVE', () => party?.leave(), false, 'party-leave');
+    const bl = this._row('BOT LEVEL');
+    for (const lv of ['easy', 'normal', 'hard']) {
+      this._b(bl, lv.toUpperCase(), () => party?.setBotLevel(lv), party?.settings.botLevel === lv, `botlevel-${lv}`);
+    }
+
+    const gr = this._row('GRENADE');
+    const nades = c.peek('grenades');
+    this._b(gr, 'INF NADES', () => (f.nades = !f.nades), f.nades, 'nades');
+    this._b(gr, 'THROW', () => {
+      if (nades) nades.count = Math.max(1, nades.count);
+      nades?.throw();
+    }, false, 'throw');
+    this._b(gr, 'AT DUMMY FEET', () => this._nadeAtDummy(), false, 'nade-dummy');
+
+    const st = c.peek('stats');
+    const pf = this._row('PROFILE');
+    if (st) {
+      const sm = st.summary();
+      this._el('div', 'stats', this.panel, `LV ${sm.level} · ${sm.xp} XP · ${sm.kills} K / ${sm.deaths} D · HS ${Math.round(sm.hs)}% · W ${sm.wins}/${sm.matches}`);
+      this._b(pf, '+1000 XP', () => { st.data.xp += 1000; st._save(); }, false, 'xp');
+      this._b(pf, 'RESET', () => { st.data = { kills: 0, deaths: 0, headshots: 0, matches: 0, wins: 0, xp: 0 }; st._save(); }, false, 'stats-reset');
+    }
+
+    const ch = this._row('CHAT');
+    const chat = c.peek('chat');
+    this._b(ch, 'TEST LINE', () => chat?.receive({ from: 'Dev', text: 'test line from the panel', color: '#ff8af0' }), false, 'chat-line');
+    this._b(ch, 'TEAM LINE', () => chat?.receive({ from: 'Dev', text: 'team test', team: true, color: '#3df2ff' }), false, 'chat-team');
+
     this._el('h4', null, this.panel, 'STATS');
     this.stats = this._el('div', 'stats', this.panel, '');
+  }
+
+  /**
+   * Practice: the dummy 6 m ahead, held still, and a grenade dropped at its
+   * feet (tests the blast and its damage wherever the map puts cover).
+   */
+  _nadeAtDummy() {
+    this._ensurePractice();
+    const pr = this.practice;
+    const nades = this.ctx.peek('grenades');
+    if (!pr || !nades) return;
+    this._dummyInFront(6);
+    if (!pr._devHeld) {
+      pr._devUpdate = pr.update;
+      pr.update = (dt) => pr.avatar.tick(dt);
+      pr._devHeld = true;
+    }
+    const d = pr.avatar.position;
+    nades.spawn({ gid: `dev${Date.now().toString(36)}`, owner: 'me', origin: [d.x + 0.6, d.y + 0.4, d.z], vel: [0, 0, 0] });
   }
 
   _spawn(i) {
@@ -196,13 +260,13 @@ export class DevPanel {
   }
 
   /** Put the dummy 10 m in front of the player, facing them, and hold it there. */
-  _dummyInFront() {
+  _dummyInFront(dist = 10) {
     const pl = this.ctx.peek('player');
     const pr = this.practice;
     const w = this.ctx.peek('world');
     if (!pl || !pr) return;
     const yaw = pl.movement.yaw;
-    const x = pl.position.x - Math.sin(yaw) * 10, z = pl.position.z - Math.cos(yaw) * 10;
+    const x = pl.position.x - Math.sin(yaw) * dist, z = pl.position.z - Math.cos(yaw) * dist;
     this.flags.freeze = true;
     pr.dummy.hp = 100;
     pr.avatar.setAlive(true);
@@ -274,6 +338,10 @@ export class DevPanel {
         s.chambered = true;
       }
     }
+    if (f.nades) {
+      const g = c.peek('grenades');
+      if (g) g.count = 2;
+    }
     const pr = this.practice;
     if (pr) {
       if (f.freeze && !pr._devHeld) {
@@ -302,7 +370,13 @@ export class DevPanel {
       this.stats.textContent =
         `map ${c.peek('world')?.mapId}  fps ~${fps}\n` +
         `draw calls ${r?.calls ?? '?'}  tris ${r?.triangles ?? '?'}\n` +
-        `pos ${p ? `${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}` : '-'}  speed ${this.speed}x`;
+        `pos ${p ? `${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}` : '-'}  speed ${this.speed}x\n` +
+        (() => {
+          const P = c.peek('party');
+          if (!P || P.phase === 'off') return 'party off';
+          return `party ${P.phase}${P.offline ? ' offline' : ''} · ${P.host ? 'host' : 'guest'} #${P.me} · ${P.players.size} players · gen ${P.gen ?? 0}` +
+            (P.rules ? ` · ${P.rules.state} ${Math.round(P.rules.timeLeft)}s` : '') + ` · nades ${c.peek('grenades')?.count ?? '-'}`;
+        })();
     }
   }
 }

@@ -216,6 +216,20 @@ class PeerGuest extends Link {
   }
 }
 
+/* --------------------------------------------------------------- offline -- */
+
+/** A room nobody can join: playing against bots needs no network at all. */
+export class OfflineHub extends Hub {
+  constructor() {
+    super();
+    this.offline = true;
+  }
+  send() {}
+  broadcast() {}
+  kick() {}
+  close() { this.closed = true; }
+}
+
 /* --------------------------------------------------------------- factory -- */
 
 /** Host a party room. Errors: room-taken, network. */
@@ -227,7 +241,9 @@ export async function openPartyHost(kind, code, { signal, gen = 0 } = {}) {
     signal?.addEventListener('abort', () => fail(new Error('cancelled')), { once: true });
     peer.on('error', (e) => {
       if (e?.type === 'peer-unavailable') return; // a guest that vanished: not our failure
-      fail(new Error(e?.type === 'unavailable-id' ? 'room-taken' : 'network'));
+      const err = new Error(e?.type === 'unavailable-id' ? 'room-taken' : 'network');
+      err.detail = e?.type ?? String(e?.message ?? e); // which PeerJS error: for the message on screen
+      fail(err);
     });
     peer.on('open', () => resolve(new PeerHost(peer)));
   });

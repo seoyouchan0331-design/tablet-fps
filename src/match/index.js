@@ -87,6 +87,7 @@ export class MatchSystem {
       practice: () => this.startPractice(),
       create: () => this.createRoom(),
       party: () => this.ctx.peek('party')?.create(),
+      bots: () => this.ctx.peek('party')?.createOffline(),
       stats: () => this.ctx.peek('stats')?.summary(),
       secondary: (id) => { const w = this.ctx.peek('weapons'); if (w) w.secondaryPick = id; },
       join: (code) => this.joinRoom(code),
@@ -555,6 +556,10 @@ export class MatchSystem {
       if (m.killed) this._onKilled(m);
       this._from.fromArray(m.from ?? [0, 0, 0]);
       ev.emit('damage:dealt', { target: this.ctx.peek('player'), amount: m.amount, headshot: m.headshot, killed: m.killed, from: this._from, confirmed: true });
+    } else if (!m.killed && m.weapon === 'grenade') {
+      // my grenade hurt the opponent: a hit marker (bullets get theirs on the shot)
+      const opp = this.ctx.peek('opponent');
+      ev.emit('damage:dealt', { target: opp.target, amount: m.amount, headshot: false, killed: false, point: opp.avatar.position, confirmed: true });
     } else if (m.killed) {
       const opp = this.ctx.peek('opponent');
       ev.emit('damage:dealt', { target: opp.target, amount: m.amount, headshot: m.headshot, killed: true, point: opp.avatar.position, confirmed: true });

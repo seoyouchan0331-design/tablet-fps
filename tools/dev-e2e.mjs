@@ -38,6 +38,48 @@ const st = await p.evaluate(() => ({ hb: !!window.__DEVPANEL__._hb, frozen: wind
 console.log('state', JSON.stringify(st));
 if (!st.hb || !st.frozen) fail('hitboxes / dummy freeze not active');
 await p.screenshot({ path: 'shots/dev-panel.png' });
+
+// ---- a grenade at the dummy hurts it (practice) --------------------------------
+await click('map-grid');
+await p.waitForTimeout(300);
+await click('nade-dummy');
+const nade = await p.waitForFunction(() => window.__ENGINE__.ctx.peek('practice').dummy.hp < 100 || !window.__ENGINE__.ctx.peek('practice').avatar.alive, null, { timeout: 60000, polling: 250 })
+  .then(() => p.evaluate(() => window.__ENGINE__.ctx.peek('practice').dummy.hp)).catch(() => null);
+console.log('dummy after a grenade:', nade);
+if (nade == null) fail('a grenade at the dummy did no damage');
+
+// ---- solo vs bots, offline ------------------------------------------------------
+await click('solo-ffa');
+await p.waitForFunction(() => { const P = window.__ENGINE__.ctx.peek('party'); return P.live === true && P.offline; }, null, { timeout: 120000, polling: 500 })
+  .catch(() => fail('SOLO FFA did not start an offline match'));
+const solo = await p.evaluate(() => { const P = window.__ENGINE__.ctx.peek('party'); return { bots: [...P.players.values()].filter((x) => x.bot).length, avatars: window.__ENGINE__.ctx.peek('opponent').party.size, map: window.__ENGINE__.ctx.peek('world').mapId }; });
+console.log('solo', JSON.stringify(solo));
+if (solo.bots !== 3 || solo.avatars !== 3) fail('solo match should have 3 bots on screen');
+// my grenade at a bot's feet: the host's blast hurts it (and I get a hit marker)
+const botHit = await p.evaluate(async () => {
+  const e = window.__ENGINE__.ctx; const P = e.peek('party');
+  const id = [...P.players.values()].find((x) => x.bot && P.alive[x.id] !== false).id;
+  const b = P._bots.get(id); b.update = () => ({}); // hold it still
+  let marker = false;
+  e.events.on('damage:dealt', (x) => { if (x.confirmed && x.target?.remoteId === id && !x.killed) marker = true; });
+  e.peek('grenades').spawn({ gid: 'devbot', owner: 'me', origin: [b.x + 0.5, b.y + 0.4, b.z], vel: [0, 0, 0] });
+  const t0 = performance.now();
+  while (performance.now() - t0 < 40000 && (P.hp[id] ?? 100) >= 100 && P.alive[id] !== false) await new Promise((r) => setTimeout(r, 200));
+  return { id, hp: P.hp[id], alive: P.alive[id], marker };
+});
+console.log('bot after my grenade:', JSON.stringify(botHit));
+if (botHit.hp >= 100 && botHit.alive !== false) fail("the host's own grenade did not hurt a bot");
+await click('party-kill');
+await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party')._scores?.[0]?.[0] === 1, null, { timeout: 15000, polling: 250 }).catch(() => fail('+1 KILL did not count'));
+await click('party-end');
+await p.waitForSelector('[data-act="result"]', { timeout: 30000 }).catch(() => fail('END MATCH did not end it'));
+await click('party-leave');
+// the menu's VS BOTS: an offline room with 3 bots, no network
+await p.waitForSelector('[data-act="bots"]', { timeout: 15000 });
+await p.evaluate(() => document.querySelector('[data-act="bots"]').click());
+await p.waitForFunction(() => { const P = window.__ENGINE__.ctx.peek('party'); return P.phase === 'lobby' && P.offline && [...P.players.values()].filter((x) => x.bot).length === 3; }, null, { timeout: 15000, polling: 250 })
+  .catch(() => fail('VS BOTS did not open an offline room with 3 bots'));
+console.log('vs bots room:', await p.evaluate(() => document.querySelector('[data-act="net-info"]')?.textContent));
 await b.close();
 console.log(failed ? 'DEV FAILED' : 'DEV OK');
 process.exit(failed ? 1 : 0);

@@ -7,9 +7,11 @@
  * event object (the pattern ARCHITECTURE.md prescribes: the target applies
  * damage). The listener is prepended so the HUD and audio see `killed`.
  */
+import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { Avatar, loadCharacterModel } from '../opponent/avatar.js';
 import { applyDamage, MAX_HP } from '../opponent/hitbox.js';
+import { grenadeDamage } from '../weapons/grenades.js';
 
 const RESPAWN_S = 2;
 const STRAFE_HALF = 5; // metres either side of the spawn
@@ -47,6 +49,16 @@ export class PracticeSystem {
         this._deadUntil = ctx.time.elapsed + RESPAWN_S;
         ctx.events.emit('actor:death', { actor: this.dummy, point: e.point, impulse: null });
       }
+    });
+    // my grenades hurt the dummy (online, the host decides; here we are alone)
+    this._offBoom = ctx.events.on('grenade:explode', (e) => {
+      if (!this.active || !this.avatar.alive || e?.owner !== 'me') return;
+      const p = this.avatar.position, b = e.position;
+      const chest = new THREE.Vector3(p.x, p.y + 1.0, p.z);
+      const d = chest.distanceTo(b);
+      const dmg = grenadeDamage(d);
+      if (dmg < 1 || !this.physics.lineOfSight(new THREE.Vector3(b.x, b.y + 0.2, b.z), chest)) return;
+      ctx.events.emit('damage:dealt', { target: this.dummy, amount: dmg, headshot: false, point: chest, weapon: 'grenade' });
     });
     this.active = true;
     this._place(0);

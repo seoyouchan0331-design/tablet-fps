@@ -104,10 +104,18 @@ export class PartyUI {
     // a roster update must not steal the name field from someone typing in it
     const typing = document.activeElement === this.nameEl ? { v: this.nameEl.value, at: this.nameEl.selectionStart } : null;
     this._clear();
-    el('div', 'label', this.root, `PARTY ROOM · ${s.host ? 'YOU ARE HOST' : 'CONNECTED'}`);
-    const c = el('div', 'code', this.root, s.code);
-    c.dataset.act = 'room-code';
-    el('div', 'sub', this.root, `${s.players.length}/8 players · friends join with this code${s.net ? ' · ' + s.net : ''}`).dataset.act = 'net-info';
+    if (s.offline) {
+      el('div', 'label', this.root, 'VS BOTS · OFFLINE');
+      el('div', 'code', this.root, 'BOTS').dataset.act = 'room-code';
+      el('div', 'sub', this.root, s.offlineWhy
+        ? `No connection service, so friends can't join — bots only. ${s.offlineWhy}`
+        : 'Just you and the bots: no internet needed.').dataset.act = 'net-info';
+    } else {
+      el('div', 'label', this.root, `PARTY ROOM · ${s.host ? 'YOU ARE HOST' : 'CONNECTED'}`);
+      const c = el('div', 'code', this.root, s.code);
+      c.dataset.act = 'room-code';
+      el('div', 'sub', this.root, `${s.players.length}/8 players · friends join with this code${s.net ? ' · ' + s.net : ''}`).dataset.act = 'net-info';
+    }
     const me = s.players.find((p) => p.id === s.me);
     const locked = !s.host || !!me?.ready;
     const ng = el('div', 'set', this.root);

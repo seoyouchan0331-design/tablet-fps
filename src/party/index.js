@@ -17,7 +17,7 @@
  * Transport: `?net=bc` BroadcastChannel tabs (tests), else PeerJS.
  */
 import * as THREE from 'three';
-import { openPartyHost, openPartyGuest } from '../net/party.js';
+import { openPartyHost, openPartyGuest, OfflineHub } from '../net/party.js';
 import { makeRoomCode } from '../net/roomcode.js';
 import { smoothRtt } from '../net/ice.js';
 import { validateHit } from '../match/validate.js';
@@ -121,9 +121,15 @@ export class PartySystem {
     try {
       this._abort = new AbortController();
       this.link = await openPartyHost(this.net, this.code, { signal: this._abort.signal });
+      this.offline = false;
     } catch (err) {
-      if (this.phase === 'connecting') this._exit(ERRORS[err.message] ?? String(err.message));
-      return;
+      if (this.phase !== 'connecting') return;
+      if (err.message === 'cancelled') return this._exit();
+      // no connection service (no internet, or a page that may not open
+      // connections): the room still works for bots, just nobody can join
+      this.link = new OfflineHub();
+      this.offline = true;
+      this._offlineWhy = `${ERRORS[err.message] ?? err.message}${err.detail ? ` (${err.detail})` : ''}`;
     }
     this.gen = 0;
     this.hostId = 0;
@@ -132,6 +138,47 @@ export class PartySystem {
     this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName(), lv: this._myLv() });
     this.phase = 'lobby';
     this._broadcastRoster();
+  }
+
+  /** A room with bots only, no network needed (the menu's VS BOTS). */
+  async createOffline() {
+    this.host = true;
+    this.me = 0;
+    this.code = 'BOTS';
+    this.phase = 'connecting';
+    this._enterParty();
+    this.link = new OfflineHub();
+    this.offline = true;
+    this._offlineWhy = '';
+    this.gen = 0;
+    this.hostId = 0;
+    this._wireHub(this.link);
+    this._attachChat();
+    this.players.set(0, { id: 0, team: 0, ready: false, primary: 'rifle', name: loadName(), lv: this._myLv() });
+    this.phase = 'lobby';
+    this._addBot();
+    this._addBot();
+    this._addBot();
+    this._broadcastRoster(false);
+  }
+
+  /**
+   * Straight into an offline match against bots (the dev panel's SOLO
+   * buttons): mode, map, how many bots.
+   */
+  async startSolo({ mode = 'ffa', map = 'town', bots = 3 } = {}) {
+    if (this.phase !== 'off') this.leave();
+    await this.createOffline();
+    while ([...this.players.values()].filter((p) => p.bot).length > bots) this._removeBot();
+    while ([...this.players.values()].filter((p) => p.bot).length < bots) this._addBot();
+    this._changeSettings({ ...this.settings, mode, map, scoreLimit: PARTY_MODES[mode]?.def });
+    this._send({ type: 'p.ready', primary: this.ui.primary ?? 'rifle' }, true);
+  }
+
+  /** Bot difficulty now, for the bots already playing too (dev panel). */
+  setBotLevel(level) {
+    this.settings.botLevel = level;
+    for (const b of this._bots?.values() ?? []) b.skill = BOT_LEVELS[level] ?? b.skill;
   }
 
   async join(code) {
@@ -854,7 +901,7 @@ export class PartySystem {
     }
     if (this.phase === 'lobby') {
       const net = this.host ? '' : this.rtt != null ? `${Math.round(this.rtt)} ms` : '';
-      this.ui.showLobby({ code: this.code, me: this.me, host: this.host, hostId: this.hostId ?? 0, players: [...this.players.values()], settings: this.settings, net });
+      this.ui.showLobby({ offline: this.host && this.offline, offlineWhy: this._offlineWhy, code: this.code, me: this.me, host: this.host, hostId: this.hostId ?? 0, players: [...this.players.values()], settings: this.settings, net });
     }
   }
 
@@ -1087,6 +1134,10 @@ export class PartySystem {
       // the host's HP is the truth: a kill always empties the local bar
       const amount = m.killed ? Math.max(Number(m.amount) || 0, player?.health?.value ?? 0) : m.amount;
       ev.emit('damage:dealt', { target: player, amount, headshot: m.headshot, killed: m.killed, from: this._from, confirmed: true });
+    } else if (!m.killed && m.attacker === this.me && m.weapon === 'grenade') {
+      // my grenade hurt someone: a hit marker (bullets get theirs on the shot)
+      const r = this.ctx.peek('opponent')?.get(m.victim);
+      if (r) ev.emit('damage:dealt', { target: r.target, amount: m.amount, headshot: false, killed: false, point: r.avatar.position, confirmed: true });
     } else if (m.killed && m.attacker === this.me) {
       const r = this.ctx.peek('opponent')?.get(m.victim);
       if (r) ev.emit('damage:dealt', { target: r.target, amount: m.amount, headshot: m.headshot, killed: true, point: r.avatar.position, confirmed: true });

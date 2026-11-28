@@ -107,6 +107,7 @@ export class Lobby {
     this._btn(row, '1v1 ROOM', 'create', () => this.on.create(), true);
     this._btn(row, 'PARTY ROOM', 'party', () => this.on.party?.(), true);
     this._btn(row, 'JOIN', 'join', () => this.showJoin());
+    this._btn(row, 'VS BOTS', 'bots', () => this.on.bots?.());
     this._btn(row, 'PRACTICE', 'practice', () => this.on.practice());
     el('div', 'err', this.root, error);
     const st = this.on.stats?.();
