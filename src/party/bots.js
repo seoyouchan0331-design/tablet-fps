@@ -62,7 +62,7 @@ export function buildNav(layout) {
   const cols = Math.floor((2 * hx) / STEP) + 1, rows = Math.floor((2 * hz) / STEP) + 1;
   // (the tower roof's box spans the whole platform; its posts stand on the
   // parapet corners, where nobody walks)
-  const solid = layout.boxes.filter((b) => !b.deco && !b.floor && b.prop !== 'towerroof').flatMap(navPieces);
+  const solid = layout.boxes.filter((b) => !b.deco && !b.floor && !b.rail && b.prop !== 'towerroof').flatMap(navPieces); // (rails: a bot never steps off a stair)
   const floors = layout.boxes.filter((b) => b.floor);
   const nodes = []; // {x, y, z, cell}
   const cells = Array.from({ length: cols * rows }, () => []); // node ids per cell

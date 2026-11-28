@@ -15,7 +15,7 @@
  * parapet, houses you can enter and climb, an arched gateway to the spawn
  * yard and a watch tower in one corner.
  */
-import { building, prop } from './shapes.js';
+import { building, prop, mirrorPiece } from './shapes.js';
 import { tower, bridge, flight, parapet } from './town.js';
 
 const S = 64; // square
@@ -84,17 +84,17 @@ const HALF = [
   { x: CW - 0.03, y: -DEEP / 2 - SLAB / 2, z: TUN.z1 - 0.08, w: 0.06, h: DEEP - SLAB, d: 0.16 },
   { x: CW - 0.03, y: -SLAB - 0.08, z: (TUN.z0 + TUN.z1) / 2, w: 0.06, h: 0.16, d: TUN.z1 - TUN.z0 },
   // the stair up into the back street, and rails round its pit
-  ...flight({ x: TUN.pit, z: (TUN.z0 + TUN.z1) / 2, dir: '+x', y0: -DEEP, rise: DEEP }),
+  ...flight({ x: TUN.pit, z: (TUN.z0 + TUN.z1) / 2, dir: '+x', y0: -DEEP, rise: DEEP, rails: 'both' }),
   ...parapet({ x0: TUN.pit, z0: TUN.z1 + 0.15, x1: TUN.x1, z1: TUN.z1 + 0.15, y0: 0, h: 1.0, posts: 3 }),
   ...parapet({ x0: TUN.pit, z0: TUN.z0 - 0.15, x1: TUN.x1, z1: TUN.z0 - 0.15, y0: 0, h: 1.0, posts: 3 }),
 
   // four stairs from the canal floor up to this quay. All climb toward -z: the
   // drawn flight's side wall then stands on the canal side (a rail), and the
   // quay side stays open to step off at the top.
-  ...flight({ x: STAIR_X, z: 13.0, dir: '-z', y0: -DEEP, rise: DEEP }), // top at z 7.4, by the bridge
-  ...flight({ x: STAIR_X, z: 21.2, dir: '-z', y0: -DEEP, rise: DEEP }), // top at z 15.6, by the gate
-  ...flight({ x: STAIR_X, z: -BR - 0.4, dir: '-z', y0: -DEEP, rise: DEEP }), // top at z -13.0
-  ...flight({ x: STAIR_X, z: -GATE - 0.6, dir: '-z', y0: -DEEP, rise: DEEP }), // top at z -21.2
+  ...flight({ x: STAIR_X, z: 13.0, dir: '-z', y0: -DEEP, rise: DEEP, rails: 'left' }), // top at z 7.4, by the bridge
+  ...flight({ x: STAIR_X, z: 21.2, dir: '-z', y0: -DEEP, rise: DEEP, rails: 'left' }), // top at z 15.6, by the gate
+  ...flight({ x: STAIR_X, z: -BR - 0.4, dir: '-z', y0: -DEEP, rise: DEEP, rails: 'left' }), // top at z -13.0
+  ...flight({ x: STAIR_X, z: -GATE - 0.6, dir: '-z', y0: -DEEP, rise: DEEP, rails: 'left' }), // top at z -21.2
 
   // parapet along the canal edge, open where a bridge, a gate or a stair's top meets the quay
   ...[
@@ -188,11 +188,7 @@ const MIDDLE = [
   ...bridge({ x: -FOOT, z0: -CW, z1: CW, fh: 0, top: 3.0, axis: 'x' }),
 ];
 
-const mirror = (b) => {
-  const flip = { '+x': '-x', '-x': '+x', '+z': '-z', '-z': '+z' };
-  const ry = b.prop && !b.sym ? (b.ry ?? 0) + Math.PI : b.ry;
-  return { ...b, x: b.x === 0 ? 0 : -b.x, z: b.z === 0 ? 0 : -b.z, ...(b.ramp ? { ramp: flip[b.ramp] } : {}), ...(ry != null ? { ry } : {}) };
-};
+const mirror = mirrorPiece;
 
 const SHELL = [
   // outer walls, from the canal floor up (the canal reaches the walls)
@@ -216,6 +212,8 @@ export const CANAL = {
     grid: false, // the floor grid would float over the canal
     floorColor: 0x767c83, // pale paving, like the quays in the art
     hill: { x: 0, z: 0, r: 6.5, y0: -0.5, y1: 3.5 }, // the plaza bridge, not the canal under it
+    // health packs on the canal floor: under the plaza bridge, and before each tunnel mouth
+    pickups: [{ x: 0, y: -DEEP, z: 0 }, { x: 3, y: -DEEP, z: -26 }, { x: -3, y: -DEEP, z: 26 }],
     boxes: [...SHELL, ...MIDDLE, ...HALF, ...HALF.map(mirror)],
     spawns: [
       { x: 25.5, y: 0, z: 0, yaw: Math.PI / 2 },

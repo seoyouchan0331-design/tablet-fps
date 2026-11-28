@@ -33,6 +33,7 @@ import { MAPS } from '../arena/layout.js';
 import { smoothRtt } from '../net/ice.js';
 import { grenadeDamage } from '../weapons/grenades.js';
 import { cleanChat } from '../ui/chat.js';
+import { PACK } from '../world/healthpacks.js';
 import { cleanName } from '../ui/party.js';
 
 const STATE_HZ = 30;
@@ -517,6 +518,33 @@ export class MatchSystem {
     }
   }
 
+  /** Host: a hurt player on a ready health pack gets +50 (both sides hear of it). */
+  _hostPickups() {
+    const pk = this.ctx.peek('pickups');
+    if (!pk?.packs.length || !this.live) return;
+    for (const role of ['host', 'guest']) {
+      if (!this.alive[role] || this.hp[role] >= MAX_HP) continue;
+      const q = role === this.role ? this.ctx.peek('player')?.position : this.ctx.peek('opponent')?.avatar?.position;
+      if (!q) continue;
+      const i = pk.packAt(q.x, q.y, q.z);
+      if (i < 0) continue;
+      const m = { role, hp: Math.min(MAX_HP, this.hp[role] + PACK.heal), pack: i };
+      this._send(MSG.HEAL, m);
+      this._applyHeal(m);
+    }
+  }
+
+  _applyHeal(m) {
+    if (m.role !== 'host' && m.role !== 'guest' || !Number.isFinite(m.hp)) return;
+    this.hp[m.role] = m.hp;
+    this.ctx.peek('pickups')?.take(m.pack);
+    if (m.role === this.role) {
+      const h = this.ctx.peek('player')?.health;
+      if (h && m.hp > h.value) h.heal(m.hp - h.value);
+      this.ctx.events.emit('pickup:health', { amount: PACK.heal });
+    }
+  }
+
   /** I died: say how, and swing the view to the killer. */
   _onKilled(m) {
     const player = this.ctx.peek('player');
@@ -649,6 +677,9 @@ export class MatchSystem {
         this.ctx.peek('chat')?.receive({ from: cleanName(m.name) || 'Opponent', text: m.text, color: '#ff7a52' });
         break;
       }
+      case MSG.HEAL:
+        if (this.role === 'guest') this._applyHeal(m);
+        break;
       case MSG.NADE:
         if (this.phase === 'match' && this.live && typeof m.gid === 'string') {
           this._nadeOwner.set(m.gid, this.other);
@@ -693,7 +724,10 @@ export class MatchSystem {
     const rawDt = Math.min(0.1, raw - (this._lastRaw ?? raw));
     this._lastRaw = raw;
 
-    if (this.role === 'host' && this.mode) this._broadcastRound(this.mode.tick(rawDt, this.hp));
+    if (this.role === 'host' && this.mode) {
+      this._broadcastRound(this.mode.tick(rawDt, this.hp));
+      this._hostPickups();
+    }
 
     const ui = ctx.peek('ui');
     if (ui?.state && this._roundEndsAt) ui.state.timeLeft = Math.max(0, this._roundEndsAt - raw);

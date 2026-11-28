@@ -53,6 +53,20 @@ for (const [what, place] of [
   if (!ok) fail(`player left ${what}`);
 }
 
+// ---- health pack (practice, CANAL): hurt, step on it, +50, and it's gone ---------
+await click('map-canal');
+await p.waitForTimeout(500);
+const pack = await p.evaluate(async () => {
+  const e = window.__ENGINE__.ctx; const pl = e.peek('player'); const pk = e.peek('pickups');
+  pl.health.value = 40;
+  pl.movement.teleport(0, -3.15, 0);
+  const t0 = performance.now();
+  while (performance.now() - t0 < 15000 && pl.health.value < 89) await new Promise((r) => setTimeout(r, 100));
+  return { packs: pk.packs.length, health: pl.health.value, gone: !pk.ready(0) };
+});
+console.log('health pack:', JSON.stringify(pack));
+if (pack.packs !== 3 || pack.health < 89 || !pack.gone) fail('the health pack did not heal (or did not go away)');
+
 // ---- a grenade at the dummy hurts it (practice) --------------------------------
 await click('map-grid');
 await p.waitForTimeout(300);
@@ -83,6 +97,23 @@ const botHit = await p.evaluate(async () => {
 });
 console.log('bot after my grenade:', JSON.stringify(botHit));
 if (botHit.hp >= 100 && botHit.alive !== false) fail("the host's own grenade did not hurt a bot");
+await click('party-kill');
+// health packs in a match: the host decides (solo, offline: I am the host)
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').leave());
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').startSolo({ mode: 'ffa', map: 'canal', bots: 1 }));
+await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party').live === true, null, { timeout: 120000, polling: 500 });
+const mp = await p.evaluate(async () => {
+  const e = window.__ENGINE__.ctx; const P = e.peek('party'); const pl = e.peek('player');
+  P.hp[P.me] = 30; pl.health.value = 30;
+  pl.movement.teleport(0, -3.15, 0);
+  const t0 = performance.now();
+  while (performance.now() - t0 < 15000 && P.hp[P.me] < 79) await new Promise((r) => setTimeout(r, 100));
+  return { hp: P.hp[P.me], bar: pl.health.value };
+});
+console.log('health pack in a match:', JSON.stringify(mp));
+if (mp.hp < 79 || mp.bar < 79) fail('the host did not heal me from the pack');
+await p.evaluate(() => window.__ENGINE__.ctx.peek('party').startSolo({ mode: 'ffa', map: 'town', bots: 3 }));
+await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party').live === true, null, { timeout: 120000, polling: 500 });
 await click('party-kill');
 await p.waitForFunction(() => window.__ENGINE__.ctx.peek('party')._scores?.[0]?.[0] === 1, null, { timeout: 15000, polling: 250 }).catch(() => fail('+1 KILL did not count'));
 await click('party-end');

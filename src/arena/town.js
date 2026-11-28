@@ -6,7 +6,7 @@
  * walkways at 3.2, roofs at 6.2 - 6.45, cover walls 1.1 m (stand to shoot
  * over, crouch to hide).
  */
-import { prop, wallWithOpenings } from './shapes.js';
+import { prop, wallWithOpenings, stairRails } from './shapes.js';
 
 const RY = { '+z': 0, '-z': Math.PI, '+x': Math.PI / 2, '-x': -Math.PI / 2 };
 const COVER = 1.1;
@@ -17,7 +17,7 @@ const COVER = 1.1;
  * 'steps16' half flight (2.8 run) stretched to width w. Players walk on a
  * hidden smooth ramp under the drawn steps.
  */
-export function flight({ x, z, dir, y0 = 0, rise = 1.6, w = 1.4 }) {
+export function flight({ x, z, dir, y0 = 0, rise = 1.6, w = 1.4, rails = 'none' }) {
   const full = rise > 2;
   const run = full ? 5.6 : 2.8;
   const width = full ? 1.6 : w;
@@ -27,8 +27,10 @@ export function flight({ x, z, dir, y0 = 0, rise = 1.6, w = 1.4 }) {
   return [
     prop(full ? 'stairs' : 'steps16', ox, oz, ry, y0, { deco: true, ...(full ? {} : { sx: width }) }),
     { x: ox, y: y0 + rise / 2, z: oz, w: along ? width : run, h: rise, d: along ? run : width, ramp: dir, hidden: true },
+    ...stairRails({ x: ox, z: oz, dir, y0, rise, run, w: width, sides: rails }),
   ];
 }
+
 
 /**
  * A cover wall from (x0, z0) to (x1, z1) (axis-aligned) standing on y0, with a
@@ -84,7 +86,7 @@ export function arcade({ x = 0, zf, zb, bays = 5, fh = 3.2, top = 6.2 }) {
   // roof and cornice
   out.push({ x, y: top + 0.125, z: (zf - 0.3 + zb) / 2, w: L + 0.6, h: 0.25, d: zb - zf + 0.3 });
   out.push(prop('cornice', x, zf - 0.3, Math.PI, top + 0.25, { sx: L + 0.6, deco: true }));
-  out.push(...flight({ x: x1 + 5.6, z: zs + 0.8, dir: '-x', rise: fh }));
+  out.push(...flight({ x: x1 + 5.6, z: zs + 0.8, dir: '-x', rise: fh, rails: 'right' })); // rail on the plaza side
   return out;
 }
 
@@ -146,13 +148,13 @@ export function tower({ x, z, s = 6, t = 0.35 }) {
   out.push({ x, y: SILL - 0.04, z: z1 - t / 2, w: SLOT, h: 0.08, d: t + 0.1 }, { x, y: SILL - 0.04, z: z0 + t / 2, w: SLOT, h: 0.08, d: t + 0.1 });
   out.push({ x: x1 - t / 2, y: SILL - 0.04, z, w: t + 0.1, h: 0.08, d: SLOT }, { x: x0 + t / 2, y: SILL - 0.04, z, w: t + 0.1, h: 0.08, d: SLOT });
   // flights round the walls, with their landings
-  out.push(...flight({ x: ix0 + B, z: iz0 + B / 2, dir: '+x', y0: 0, w: B }));
+  out.push(...flight({ x: ix0 + B, z: iz0 + B / 2, dir: '+x', y0: 0, w: B, rails: 'right' })); // rails on the open middle
   out.push({ x: ix1 - B / 2, y: 0.8, z: (iz0 + iz0 + B + 2.8) / 2, w: B, h: 1.6, d: B + 2.8, noEdge: true }); // SE landing + what holds flight 2
-  out.push(...flight({ x: ix1 - B / 2, z: iz0 + B, dir: '+z', y0: 1.6, w: B }));
+  out.push(...flight({ x: ix1 - B / 2, z: iz0 + B, dir: '+z', y0: 1.6, w: B, rails: 'right' }));
   out.push({ x: ix1 - B / 2, y: 1.6, z: iz1 - B / 2, w: B, h: 3.2, d: B, noEdge: true }); // NE landing
-  out.push(...flight({ x: ix1 - B, z: iz1 - B / 2, dir: '-x', y0: 3.2, w: B }));
+  out.push(...flight({ x: ix1 - B, z: iz1 - B / 2, dir: '-x', y0: 3.2, w: B, rails: 'right' }));
   out.push({ x: ix0 + B / 2, y: 4.8 - 0.15, z: iz1 - B / 2, w: B, h: 0.3, d: B, noEdge: true }); // NW landing
-  out.push(...flight({ x: ix0 + B / 2, z: iz1 - B, dir: '-z', y0: 4.8, w: B }));
+  out.push(...flight({ x: ix0 + B / 2, z: iz1 - B, dir: '-z', y0: 4.8, w: B, rails: 'right' }));
   // the platform: the south band (with the head of the last flight) and the middle
   out.push({ x: (ix0 + ix1) / 2, y: TOP - 0.15, z: iz0 + B / 2, w: ix1 - ix0, h: 0.3, d: B, noEdge: true });
   out.push({ x: (ix0 + B + ix1) / 2, y: TOP - 0.15, z: (iz0 + B + iz1 - B) / 2, w: ix1 - ix0 - B, h: 0.3, d: iz1 - iz0 - 2 * B, noEdge: true });

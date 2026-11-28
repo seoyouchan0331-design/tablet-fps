@@ -27,6 +27,7 @@ import { Deathmatch, PARTY_MODES, spawnCandidates, pickSpawn, isTeamMode, gunFor
 import { Bot, buildNav, BOT_LEVELS, spawnPoints } from './bots.js';
 import { packState, unpackState } from './wire.js';
 import { grenadeDamage } from '../weapons/grenades.js';
+import { PACK } from '../world/healthpacks.js';
 import { insideXZ } from '../arena/shapes.js';
 import { MAPS } from '../arena/layout.js';
 import { PartyUI, playerName, names, levels, cleanName } from '../ui/party.js';
@@ -891,6 +892,9 @@ export class PartySystem {
       case 'p.nade':
         if (this.phase === 'match' && typeof m.gid === 'string') this.ctx.peek('grenades')?.spawn({ gid: m.gid, owner: m.id, origin: m.o, vel: m.v });
         break;
+      case 'p.heal':
+        this._applyHeal(m);
+        break;
     }
   }
 
@@ -1213,6 +1217,33 @@ export class PartySystem {
     }
   }
 
+  /** Host: anyone hurt standing on a ready health pack gets +50, and everyone hears of it. */
+  _hostPickups() {
+    const pk = this.ctx.peek('pickups');
+    if (!pk?.packs.length || !this.live) return;
+    for (const p of this.players.values()) {
+      if (this.alive[p.id] === false || (this.hp[p.id] ?? MAX_HP) >= MAX_HP) continue;
+      const q = this._where(p.id);
+      if (!q) continue;
+      const i = pk.packAt(q.x, q.y, q.z);
+      if (i < 0) continue;
+      const m = { type: 'p.heal', id: p.id, hp: Math.min(MAX_HP, (this.hp[p.id] ?? MAX_HP) + PACK.heal), pack: i };
+      this.link?.broadcast(m);
+      this._applyHeal(m);
+    }
+  }
+
+  _applyHeal(m) {
+    if (!Number.isInteger(m.id) || !Number.isFinite(m.hp)) return;
+    this.hp[m.id] = m.hp;
+    this.ctx.peek('pickups')?.take(m.pack);
+    if (m.id === this.me) {
+      const h = this.ctx.peek('player')?.health;
+      if (h && m.hp > h.value) h.heal(m.hp - h.value);
+      this.ctx.events.emit('pickup:health', { amount: PACK.heal });
+    }
+  }
+
   /** Host: where a player stands (me, a bot, or a guest's newest state). */
   _where(id) {
     if (id === this.me) {
@@ -1343,6 +1374,7 @@ export class PartySystem {
     this._lastWall = wall;
     if (this.host && this.rules) {
       this._hostEvents(this.rules.tick(wallDt, this.settings.mode === 'koth' ? { inZone: this._inZone() } : undefined));
+      this._hostPickups();
       this._stepBots(wallDt, raw);
     }
     const ui = ctx.peek('ui');

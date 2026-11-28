@@ -25,7 +25,7 @@ import { insideXZ, topAt } from '../arena/shapes.js';
  */
 export function insideSolid(layout, x, y, z) {
   for (const b of layout.boxes) {
-    if (b.deco || b.prop || b.hidden && !b.ramp) continue;
+    if (b.deco || b.prop || b.rail || b.hidden && !b.ramp) continue;
     if (!insideXZ(b, x, z, -0.04)) continue;
     const bottom = b.y - b.h / 2;
     const top = b.ramp ? topAt(b, x, z) : b.y + b.h / 2;

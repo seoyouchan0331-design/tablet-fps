@@ -214,11 +214,11 @@ const TOWN_HALF = [
   { x: 25.5, y: 0.8, z: (-22.4 + TERRACE_FRONT) / 2, w: 7, h: 1.6, d: TERRACE_FRONT + 22.4, noEdge: true },
   { x: 32, y: 1.6, z: (-22.4 + TERRACE_FRONT) / 2, w: 6, h: 3.2, d: TERRACE_FRONT + 22.4, noEdge: true },
   { x: 25.5, y: 1.56, z: TERRACE_FRONT + 0.04, w: 7, h: 0.08, d: 0.08 },
-  ...flight({ x: 19.2, z: TERRACE_FRONT - 1, dir: '+x', y0: 0, w: 2 }),
-  ...flight({ x: 26.2, z: TERRACE_FRONT - 1, dir: '+x', y0: 1.6, w: 2 }),
+  ...flight({ x: 19.2, z: TERRACE_FRONT - 1, dir: '+x', y0: 0, w: 2, rails: 'both' }),
+  ...flight({ x: 26.2, z: TERRACE_FRONT - 1, dir: '+x', y0: 1.6, w: 2, rails: 'both' }),
   ...parapet({ x0: 22, z0: TERRACE_FRONT + 0.15, x1: 26.2, z1: TERRACE_FRONT + 0.15, y0: 1.6 }),
   ...parapet({ x0: 29, z0: TERRACE_FRONT + 0.15, x1: 33.4, z1: TERRACE_FRONT + 0.15, y0: 3.2 }),
-  ...flight({ x: 34.2, z: TERRACE_FRONT + 5.6, dir: '-z', rise: 3.2 }),
+  ...flight({ x: 34.2, z: TERRACE_FRONT + 5.6, dir: '-z', rise: 3.2, rails: 'left' }), // the open side, away from the outer wall
   // plaza cover: crate pile, stall, lone crate, bench, hedge planter
   prop('cratestack', 6, 3.5, Math.PI / 4),
   prop('stall', 4, -7.2, -Math.PI / 6),

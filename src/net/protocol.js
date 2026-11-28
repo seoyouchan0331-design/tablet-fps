@@ -20,6 +20,7 @@ export const MSG = Object.freeze({
   PONG: 'pong',
   NADE: 'nade',
   CHAT: 'chat',
+  HEAL: 'heal',
 });
 
 const TYPES = new Set(Object.values(MSG));

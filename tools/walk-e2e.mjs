@@ -25,10 +25,12 @@ const CANAL_ROUTES = {
   // lock gate's doorway, back up a stair on the far quay
   canalfloor: { start: [9, -12.2], path: [[6.9, -12.2], [5.15, -12.6], [5.15, -7.8], [3.5, -8.2], [0, -8.2], [0, 8], [0, 14], [0, 16.4], [-5.15, 16.2], [-5.15, 20.6], [-7.5, 20.4], [-9, 20.4]], y: 0 },
   tunnel: { start: [0, -20, -3.15], path: [[2.5, -26], [8, -26], [21, -26], [27.3, -26], [29.5, -26]], y: 0 },
+  // pushed sideways off a canal stair, toward the canal: the rail holds (stays on the steps, ~1.7 m up)
+  stairrail: { start: [5.15, -10, -1.6], path: [[2.0, -10]], y: -1.71, blocked: true },
   plazabridge: { start: [9, 0], path: [[3, 0], [-3, 0], [-9, 0]], y: 0 },
   footbridge: { start: [9, 23], path: [[0, 23], [-9, 23]], y: 0 },
   gatewalk: { start: [8, 15], path: [[0, 15], [-8, 15]], y: 0 },
-  canaltower: { start: [21, 24.5], path: [[23.4, 24.5], [23.5, 23.0], [27.5, 23.0], [27.5, 26.0], [23.5, 26.0], [23.5, 23.0], [25.5, 24.5]], y: 6.4 },
+  canaltower: { start: [21, 24.5], path: [[23.4, 24.5], [23.5, 23.0], [27.5, 23.0], [27.5, 26.0], [23.5, 26.0], [23.5, 22.4], [25.5, 22.4], [25.5, 24.5]], y: 6.4 },
 };
 const ROUTES = {
   tower: { start: [19.5, 18.5], path: [[22.4, 18.5], [22.5, 16.5], [25.9, 16.5], [25.9, 20.5], [22.5, 20.5], [22.5, 16.5], [24.5, 18.2]], y: 6.4 },
@@ -74,7 +76,7 @@ for (const [map, name, r] of ALL) {
     await new Promise((res) => setTimeout(res, 400));
     return { ok: true, log, y: mv.position.y };
   }, r);
-  const ok = res.ok && Math.abs(res.y - r.y) < 0.25;
+  const ok = r.blocked ? !res.ok && Math.abs(res.y - r.y) < 0.35 : res.ok && Math.abs(res.y - r.y) < 0.25;
   if (!ok) fail++;
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}: y=${res.y.toFixed(2)} (want ${r.y})  ${res.log.join(' | ')}`);
 }

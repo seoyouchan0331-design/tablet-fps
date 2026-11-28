@@ -3,6 +3,9 @@
  *   { x, y, z, w, h, d }            centre and full size (metres)
  * with optional extras:
  *   ry: angle                        turned about the vertical axis
+ *   shear: { axis: 'x'|'z', k }      a box leaned along a slope: every point's
+ *                                    height grows by k per metre along axis
+ *                                    (stair rails: drawn and solid as leaned)
  *   ramp: '+x' | '-x' | '+z' | '-z'  a wedge that rises toward that side
  *                                    (in the piece's own, unturned frame)
  *   c: 0xrrggbb                      surface colour (default grey)
@@ -55,7 +58,7 @@ export function mirrorPiece(b) {
   const flip = { '+x': '-x', '-x': '+x', '+z': '-z', '-z': '+z' };
   // a prop has a front: turned 180 degrees with its position (a box doesn't care)
   const ry = b.prop && !b.sym ? (b.ry ?? 0) + Math.PI : b.ry;
-  return { ...b, x: b.x === 0 ? 0 : -b.x, z: b.z === 0 ? 0 : -b.z, ...(b.ramp ? { ramp: flip[b.ramp] } : {}), ...(ry != null ? { ry } : {}) };
+  return { ...b, x: b.x === 0 ? 0 : -b.x, z: b.z === 0 ? 0 : -b.z, ...(b.ramp ? { ramp: flip[b.ramp] } : {}), ...(b.shear ? { shear: { ...b.shear, k: -b.shear.k } } : {}), ...(ry != null ? { ry } : {}) };
 }
 
 /* ------------------------------------------------------------- helpers -- */
@@ -239,6 +242,9 @@ export function building({ x, z, w, d, fh = 3.2, t = 0.35, slab = 0.3, doors = [
   const zS = pick.wall === '-z' ? z - hd + t + sw / 2 : z + hd - t - sw / 2;
   const r0 = sdir === '+x' ? xIn : xOut - run; // ramp spans r0..r0+run
   out.push({ x: r0 + run / 2, y: (fh - slab) / 2 + slab / 2, z: zS, w: run, h: fh, d: sw, ramp: sdir, noEdge: false });
+  // a rail on the room side: the stairs climb against one wall, the other side drops
+  const roomSide = (pick.wall === '-z') === (sdir === '+x') ? 'right' : 'left';
+  out.push(...stairRails({ x: r0 + run / 2, z: zS, dir: sdir, y0: 0, rise: fh, run, w: sw, sides: roomSide }));
   // upper slab with a hole over the stairs
   const slabY = fh - slab / 2;
   const zA = pick.wall === '-z' ? z - hd + t + sw : z - hd + t; // slab beside the stairs: zA..zB
@@ -326,6 +332,33 @@ function ornament({ x, z, w, d, fh, slab, doors, windows }) {
   return out;
 }
 
+/**
+ * Solid rails along a flight whose middle is (x, z): 1 m walls leaned with
+ * the slope, so nobody steps off the side. sides: 'left' | 'right' | 'both'
+ * | 'none', as seen climbing. Walk graphs ignore them (rail: true).
+ */
+export function stairRails({ x, z, dir, y0, rise, run, w, sides = 'both' }) {
+  if (sides === 'none') return [];
+  const f = { '+x': [1, 0], '-x': [-1, 0], '+z': [0, 1], '-z': [0, -1] }[dir];
+  const right = [-f[1], f[0]]; // climbing direction x up
+  const along = dir[1] === 'z';
+  const k = (rise / run) * (dir[0] === '+' ? 1 : -1);
+  // the bottom 30 % stays open: below ~1 m a step off the side is harmless,
+  // and it is where people get on and off the flight sideways
+  const START = 0.3;
+  const len = run * (1 - START), shift = (run * START) / 2; // centre moves up the flight
+  const out = [];
+  for (const s of sides === 'both' ? [1, -1] : sides === 'right' ? [1] : [-1]) {
+    const off = s * (w / 2 + 0.05);
+    out.push({
+      x: x + right[0] * off + f[0] * shift, y: y0 + rise * (START + (1 - START) / 2) + 0.5, z: z + right[1] * off + f[1] * shift,
+      w: along ? 0.08 : len, h: 1.0, d: along ? len : 0.08,
+      shear: { axis: along ? 'z' : 'x', k }, rail: true,
+    });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------ geometry -- */
 
 function paint(g, hex) {
@@ -338,6 +371,16 @@ function paint(g, hex) {
     a[i * 3 + 2] = col.b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return g;
+}
+
+/** A box leaned along a slope (shear), in the piece's own frame. */
+function sheared(b) {
+  const g = new THREE.BoxGeometry(b.w, b.h, b.d).toNonIndexed();
+  const p = g.attributes.position;
+  const ax = b.shear.axis === 'z' ? 2 : 0;
+  for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + (ax === 0 ? p.getX(i) : p.getZ(i)) * b.shear.k);
+  g.computeVertexNormals();
   return g;
 }
 
@@ -357,7 +400,7 @@ function wedge(b) {
 
 /** Surface geometry of one piece, world-placed, vertex-coloured. */
 export function pieceGeometry(b, fallback = DEFAULT_COLOR) {
-  let g = b.prop ? propGeometry(b) : b.ramp ? wedge(b) : new THREE.BoxGeometry(b.w, b.h, b.d).toNonIndexed();
+  let g = b.prop ? propGeometry(b) : b.ramp ? wedge(b) : b.shear ? sheared(b) : new THREE.BoxGeometry(b.w, b.h, b.d).toNonIndexed();
   if (b.ry) g.rotateY(b.ry);
   g.translate(b.x, b.y, b.z);
   // merge needs identical attribute sets
@@ -388,7 +431,7 @@ export function edgeGeometries(b, t, fallback = DEFAULT_EDGE) {
     return [paint(g, b.e ?? fallback)];
   }
   if (b.prop && b.deco) return [];
-  const surf = b.prop ? propGeometry(b) : b.ramp ? wedge(b) : new THREE.BoxGeometry(b.w, b.h, b.d);
+  const surf = b.prop ? propGeometry(b) : b.ramp ? wedge(b) : b.shear ? sheared(b) : new THREE.BoxGeometry(b.w, b.h, b.d);
   if (b.ry) surf.rotateY(b.ry);
   surf.translate(b.x, b.y, b.z);
   const edges = new THREE.EdgesGeometry(surf, 25);
